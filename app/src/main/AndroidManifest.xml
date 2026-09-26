@@ -12,7 +12,8 @@
         android:label="EchoLink"
         android:allowBackup="true"
         android:supportsRtl="true"
-        android:resizeableActivity="true">
+        android:resizeableActivity="true"
+        android:enableOnBackInvokedCallback="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
