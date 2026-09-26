@@ -160,6 +160,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), dp(12), dp(14), 0)
             setBackgroundColor(0xFF05060C.toInt())
+            applySystemInsets(this)
         }
 
         root.addView(label("ECHOLINK", 29f, 0xFFE7E5EE.toInt()).apply {
@@ -379,6 +380,14 @@ class MainActivity : Activity() {
         currentScreen = "settings"
         val root = pageRoot()
         root.addView(pageTitle("SETTINGS", "Device connection and recording information"))
+        val scroll = ScrollView(this).apply {
+            clipToPadding = false
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            setPadding(0, dp(2), 0, dp(8))
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
         val card = panel()
         val input = findBluetoothInput()
         addInfoRow(card, "Device connection", if (input != null) friendlyDeviceName(input) else "Not connected")
@@ -387,11 +396,16 @@ class MainActivity : Activity() {
         addInfoRow(card, "Storage", formatFreeSpace(recordingsDir().parentFile?.usableSpace ?: filesDir.usableSpace) + " free")
         addInfoRow(card, "Save location", "Internal app storage")
         addInfoRow(card, "System recording indicator", "Enabled")
-        root.addView(card, lp(-1, -2))
-        root.addView(label(
+        content.addView(card, lp(-1, -2))
+        content.addView(label(
             "EchoLink does not play captured audio live. If the Bluetooth microphone disappears while recording, the app waits for it and resumes when it becomes available.",
             11f, 0xFF81768E.toInt()
-        ).apply { setPadding(dp(4), dp(10), dp(4), dp(8)) }, lp(-1, -2))
+        ).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(4), dp(10), dp(4), dp(12))
+        }, lp(-1, -2))
+        scroll.addView(content, LinearLayout.LayoutParams(-1, -2))
+        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         addBottomNav(root, 1)
         setContentView(root)
     }
@@ -434,7 +448,16 @@ class MainActivity : Activity() {
             "OFF • EchoLink never plays captured audio live while recording.",
             11f, 0xFF81768E.toInt()
         ), lp(-1, -2))
-        root.addView(card, lp(-1, -2))
+        val scroll = ScrollView(this).apply {
+            clipToPadding = false
+            setPadding(0, dp(2), 0, dp(8))
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        content.addView(card, lp(-1, -2))
+        scroll.addView(content, LinearLayout.LayoutParams(-1, -2))
+        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         addBottomNav(root, 2)
         setContentView(root)
     }
@@ -443,6 +466,7 @@ class MainActivity : Activity() {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(14), dp(12), dp(14), 0)
         setBackgroundColor(0xFF05060C.toInt())
+        applySystemInsets(this)
     }
 
     private fun pageTitle(title: String, subtitle: String): LinearLayout {
@@ -728,7 +752,10 @@ class MainActivity : Activity() {
         val adjustmentPanel = panel().apply {
             setPadding(dp(10), dp(10), dp(10), dp(10))
         }
-        adjustmentPanel.addView(label("EQUALIZER", 12f, 0xFFB58CFF.toInt()), lp(-1, 26))
+        adjustmentPanel.addView(label("EQUALIZER", 12f, 0xFFB58CFF.toInt()).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            includeFontPadding = false
+        }, lp(-1, 34))
 
         val eqSliders = mutableListOf<SeekBar>()
         val switches = mutableListOf<Switch>()
@@ -752,8 +779,11 @@ class MainActivity : Activity() {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
             }
-            val caption = label(dbText(name, initialValues[index]), 11.5f, Color.WHITE)
-            row.addView(caption, LinearLayout.LayoutParams(dp(108), dp(48)))
+            val caption = label(dbText(name, initialValues[index]), 11.5f, Color.WHITE).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                includeFontPadding = false
+            }
+            row.addView(caption, LinearLayout.LayoutParams(dp(132), dp(56)))
             val slider = SeekBar(this).apply {
                 max = 200
                 progress = initialValues[index]
@@ -768,25 +798,31 @@ class MainActivity : Activity() {
                 })
             }
             eqSliders += slider
-            row.addView(slider, LinearLayout.LayoutParams(0, dp(48), 1f))
-            adjustmentPanel.addView(row, lp(-1, 52))
+            row.addView(slider, LinearLayout.LayoutParams(0, dp(56), 1f))
+            adjustmentPanel.addView(row, lp(-1, 60))
         }
 
-        adjustmentPanel.addView(label("PROCESSING", 12f, 0xFFB58CFF.toInt()), lp(-1, 26))
+        adjustmentPanel.addView(label("PROCESSING", 12f, 0xFFB58CFF.toInt()).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            includeFontPadding = false
+        }, lp(-1, 34))
 
         fun addSwitch(title: String, checked: Boolean, setter: (Boolean) -> Unit) {
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
             }
-            row.addView(label(title, 12f, Color.WHITE), LinearLayout.LayoutParams(0, dp(46), 1f))
+            row.addView(label(title, 12f, Color.WHITE).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                includeFontPadding = false
+            }, LinearLayout.LayoutParams(0, dp(52), 1f))
             val sw = Switch(this).apply {
                 isChecked = checked
                 setOnCheckedChangeListener { _, value -> setter(value) }
             }
             switches += sw
-            row.addView(sw, LinearLayout.LayoutParams(dp(58), dp(46)))
-            adjustmentPanel.addView(row, lp(-1, 48))
+            row.addView(sw, LinearLayout.LayoutParams(dp(58), dp(52)))
+            adjustmentPanel.addView(row, lp(-1, 54))
         }
 
         addSwitch("Auto-Gain Control", settings.agc) { settings.agc = it }
@@ -796,7 +832,10 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val noiseCaption = label("Noise Reduction  " + settings.noiseReduction + "%", 12f, Color.WHITE)
+        val noiseCaption = label("Noise Reduction  " + settings.noiseReduction + "%", 12f, Color.WHITE).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            includeFontPadding = false
+        }
         noiseRow.addView(noiseCaption, LinearLayout.LayoutParams(0, dp(48), 1f))
         val noise = SeekBar(this).apply {
             max = 100
@@ -810,8 +849,8 @@ class MainActivity : Activity() {
                 override fun onStopTrackingTouch(s: SeekBar?) {}
             })
         }
-        noiseRow.addView(noise, LinearLayout.LayoutParams(dp(160), dp(48)))
-        adjustmentPanel.addView(noiseRow, lp(-1, 52))
+        noiseRow.addView(noise, LinearLayout.LayoutParams(dp(180), dp(52)))
+        adjustmentPanel.addView(noiseRow, lp(-1, 58))
 
         val buttons = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -1296,6 +1335,37 @@ class MainActivity : Activity() {
 
     private fun rowButtonLp() = LinearLayout.LayoutParams(0, dp(46), 1f).apply {
         setMargins(dp(2), 0, dp(2), 0)
+    }
+
+    private fun applySystemInsets(root: View) {
+        val baseLeft = root.paddingLeft
+        val baseTop = root.paddingTop
+        val baseRight = root.paddingRight
+        val baseBottom = root.paddingBottom
+
+        root.setOnApplyWindowInsetsListener { v, insets ->
+            val topInset: Int
+            val bottomInset: Int
+            if (Build.VERSION.SDK_INT >= 30) {
+                val bars = insets.getInsets(WindowInsets.Type.systemBars())
+                topInset = bars.top
+                bottomInset = bars.bottom
+            } else {
+                @Suppress("DEPRECATION")
+                topInset = insets.systemWindowInsetTop
+                @Suppress("DEPRECATION")
+                bottomInset = insets.systemWindowInsetBottom
+            }
+
+            v.setPadding(
+                baseLeft,
+                baseTop + topInset,
+                baseRight,
+                max(baseBottom, bottomInset + dp(4))
+            )
+            insets
+        }
+        root.post { root.requestApplyInsets() }
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
