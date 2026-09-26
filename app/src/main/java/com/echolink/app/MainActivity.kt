@@ -759,7 +759,7 @@ class MainActivity : Activity() {
                 var i = 0
                 while (i + 1 < offset) {
                     val raw = (sourceData[i].toInt() and 0xFF) or
-                        (sourceData[i + 1].toInt() shl 8)
+                        ((sourceData[i + 1].toInt() and 0xFF) shl 8)
                     val sample = if ((raw and 0x8000) != 0) raw - 65536 else raw
                     peak = max(peak, abs(sample))
                     i += 2
