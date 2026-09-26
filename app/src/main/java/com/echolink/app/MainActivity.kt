@@ -558,39 +558,40 @@ class MainActivity : Activity() {
             { settings.presence = it },
             { settings.brilliance = it }
         )
-        val eq = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-        }
+        val eqSliders = mutableListOf<SeekBar>()
 
         eqNames.forEachIndexed { index, name ->
-            val col = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(4), dp(1), dp(4), dp(1))
             }
-            val caption = label(valueText(name, 100), 9.5f, 0xFFD6D6E2.toInt()).apply {
-                gravity = Gravity.CENTER
-                maxLines = 2
+
+            val caption = label("$name  0 dB", 12f, Color.WHITE).apply {
+                gravity = Gravity.CENTER_VERTICAL
             }
-            col.addView(caption, lp(-1, -2))
+            row.addView(caption, LinearLayout.LayoutParams(dp(104), dp(46)))
+
             val slider = SeekBar(this).apply {
                 max = 200
                 progress = 100
-                rotation = -90f
                 splitTrack = false
                 setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                     override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
                         eqSetters[index](p)
-                        caption.text = valueText(name, p)
+                        val db = (p - 100) * 12 / 100
+                        caption.text = name + "  " + (if (db > 0) "+" else "") + db + " dB"
                     }
                     override fun onStartTrackingTouch(s: SeekBar?) {}
                     override fun onStopTrackingTouch(s: SeekBar?) {}
                 })
             }
-            col.addView(slider, LinearLayout.LayoutParams(dp(54), dp(92)))
-            eq.addView(col, LinearLayout.LayoutParams(0, dp(118), 1f))
+            eqSliders += slider
+            row.addView(slider, LinearLayout.LayoutParams(0, dp(46), 1f))
+            adjustments.addView(row, lp(-1, dp(50)))
         }
-        adjustments.addView(eq, lp(-1, dp(124)))
+
+        val adjustmentSwitches = mutableListOf<Switch>()
 
         fun switchRow(title: String, onChange: (Boolean) -> Unit) {
             val row = LinearLayout(this).apply {
@@ -603,6 +604,7 @@ class MainActivity : Activity() {
                 isChecked = false
                 setOnCheckedChangeListener { _, checked -> onChange(checked) }
             }
+            adjustmentSwitches += sw
             row.addView(sw, LinearLayout.LayoutParams(dp(58), dp(44)))
             adjustments.addView(row, lp(-1, dp(46)))
         }
@@ -686,9 +688,13 @@ class MainActivity : Activity() {
             settings.agc = false
             settings.voiceIsolation = false
             settings.noiseReduction = 0
+
+            eqSliders.forEach { it.progress = 100 }
+            adjustmentSwitches.forEach { it.isChecked = false }
+            noise.progress = 0
+
             if (activeFile == file) releasePlayer()
             Toast.makeText(this, "Audio adjustments reset", Toast.LENGTH_SHORT).show()
-            refreshLibrary()
         }
 
         back.setOnClickListener {
@@ -853,7 +859,9 @@ class MainActivity : Activity() {
                 var remaining = payload
                 var low = 0.0
                 var midLow = 0.0
-                var highLow = 0.0
+                var mid = 0.0
+                var highMid = 0.0
+                var high = 0.0
                 var envelope = 0.0
                 var agcGain = 1.0
 
@@ -869,20 +877,25 @@ class MainActivity : Activity() {
                         val sample = if ((raw and 0x8000) != 0) raw - 65536 else raw
                         val x = sample / 32768.0
 
-                        low += 0.035 * (x - low)
-                        midLow += 0.12 * (x - midLow)
-                        highLow += 0.35 * (x - highLow)
+                        // Five separated bands for the 16 kHz recordings.
+                        low += 0.068 * (x - low)          // 0-180 Hz
+                        midLow += 0.240 * (x - midLow)    // 180-700 Hz
+                        mid += 0.506 * (x - mid)          // 700-1800 Hz
+                        highMid += 0.747 * (x - highMid)  // 1800-3500 Hz
+                        high += 0.885 * (x - high)         // 3500-5500 Hz
 
                         val bassBand = low
                         val midBand = midLow - low
-                        val trebleBand = x - highLow
-                        val presenceBand = highLow - midLow
+                        val presenceBand = highMid - mid
+                        val trebleBand = high - highMid
+                        val brillianceBand = x - high
+
                         var y = x +
                             bassBand * (gainDb(settings.bass) - 1.0) +
                             midBand * (gainDb(settings.mid) - 1.0) +
                             trebleBand * (gainDb(settings.treble) - 1.0) +
                             presenceBand * (gainDb(settings.presence) - 1.0) +
-                            trebleBand * 0.35 * (gainDb(settings.brilliance) - 1.0)
+                            brillianceBand * (gainDb(settings.brilliance) - 1.0)
 
                         if (settings.voiceIsolation) {
                             y = y.coerceIn(-0.8, 0.8)
