@@ -512,7 +512,7 @@ class MainActivity : Activity() {
         val target = File(
             dir,
             source.nameWithoutExtension +
-                if (mode == PlaybackMode.BOOST) "_boost_v4" else "_clear_v4" +
+                (if (mode == PlaybackMode.BOOST) "_boost_v4" else "_clear_v4") +
                 ".wav"
         )
 
