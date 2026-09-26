@@ -451,6 +451,14 @@ class MainActivity : Activity() {
             seek.progress = 0
             position.text = "00:00 / " + formatMillis(knownDuration)
 
+            if (mode == PlaybackMode.BOOST) {
+                // Playback-only boost avoids rewriting PCM and makes the change
+                // immediately audible without introducing digital artifacts.
+                mp.setVolume(2.0f, 2.0f)
+            } else {
+                mp.setVolume(1.0f, 1.0f)
+            }
+
             mp.setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -508,56 +516,12 @@ class MainActivity : Activity() {
         releasePlayer(); startPlayback(file,playButton,seek,position,rate,mode)
     }
     private fun createProcessedFile(source: File, mode: PlaybackMode): File {
-        val dir = File(cacheDir, "processed").apply { mkdirs() }
-        val suffix = if (mode == PlaybackMode.BOOST) "_boost_v5" else "_clear_v5"
-        val target = File(dir, source.nameWithoutExtension + suffix + ".wav")
-
-        RandomAccessFile(source, "r").use { input ->
-            val payloadSize = (input.length() - 44L).coerceAtLeast(0L)
-            RandomAccessFile(target, "rw").use { out ->
-                out.setLength(0)
-                writeWavHeader(out, payloadSize)
-                input.seek(44L)
-
-                val buffer = ByteArray(8192)
-                var remaining = payloadSize
-
-                while (remaining > 0L) {
-                    val n = input.read(
-                        buffer,
-                        0,
-                        minOf(buffer.size.toLong(), remaining).toInt()
-                    )
-                    if (n <= 0) break
-
-                    if (mode == PlaybackMode.BOOST) {
-                        // Deliberately use gain only. No filtering, resampling,
-                        // tanh shaping, or feedback. This keeps the PCM format
-                        // identical to the original recording.
-                        var i = 0
-                        while (i + 1 < n) {
-                            val raw = (buffer[i].toInt() and 0xFF) or
-                                (buffer[i + 1].toInt() shl 8)
-                            val sample = if ((raw and 0x8000) != 0) raw - 65536 else raw
-                            val boosted = (sample * 1.12f)
-                                .toInt()
-                                .coerceIn(-32768, 32767)
-
-                            buffer[i] = (boosted and 0xFF).toByte()
-                            buffer[i + 1] = (boosted shr 8).toByte()
-                            i += 2
-                        }
-                    }
-
-                    // CLEAR intentionally leaves the PCM bytes untouched for this
-                    // version. It proves the post-save processing path is not
-                    // changing the audio data before we add any more DSP.
-                    out.write(buffer, 0, n)
-                    remaining -= n.toLong()
-                }
-            }
+        // CLEAR currently uses the original PCM unchanged. BOOST is handled at
+        // playback time instead, so this path is only retained for CLEAR.
+        if (mode == PlaybackMode.CLEAR) {
+            return source
         }
-        return target
+        return source
     }
 
     private fun writeWavHeader(r:RandomAccessFile,size:Long){
