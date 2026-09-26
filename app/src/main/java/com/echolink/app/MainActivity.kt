@@ -509,55 +509,49 @@ class MainActivity : Activity() {
     }
     private fun createProcessedFile(source: File, mode: PlaybackMode): File {
         val dir = File(cacheDir, "processed").apply { mkdirs() }
-        val target = File(
-            dir,
-            source.nameWithoutExtension +
-                (if (mode == PlaybackMode.BOOST) "_boost_v4" else "_clear_v4") +
-                ".wav"
-        )
+        val suffix = if (mode == PlaybackMode.BOOST) "_boost_v5" else "_clear_v5"
+        val target = File(dir, source.nameWithoutExtension + suffix + ".wav")
 
         RandomAccessFile(source, "r").use { input ->
-            val size = (input.length() - 44L).coerceAtLeast(0L)
+            val payloadSize = (input.length() - 44L).coerceAtLeast(0L)
             RandomAccessFile(target, "rw").use { out ->
                 out.setLength(0)
-                writeWavHeader(out, size)
-                input.seek(44)
+                writeWavHeader(out, payloadSize)
+                input.seek(44L)
 
                 val buffer = ByteArray(8192)
-                var filtered = 0f
-                var remaining = size
+                var remaining = payloadSize
 
                 while (remaining > 0L) {
-                    val n = input.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
+                    val n = input.read(
+                        buffer,
+                        0,
+                        minOf(buffer.size.toLong(), remaining).toInt()
+                    )
                     if (n <= 0) break
 
-                    var i = 0
-                    while (i + 1 < n) {
-                        val raw = (buffer[i].toInt() and 0xFF) or (buffer[i + 1].toInt() shl 8)
-                        val sample = if ((raw and 0x8000) != 0) raw - 65536 else raw
-                        val inputSample = sample / 32768f
+                    if (mode == PlaybackMode.BOOST) {
+                        // Deliberately use gain only. No filtering, resampling,
+                        // tanh shaping, or feedback. This keeps the PCM format
+                        // identical to the original recording.
+                        var i = 0
+                        while (i + 1 < n) {
+                            val raw = (buffer[i].toInt() and 0xFF) or
+                                (buffer[i + 1].toInt() shl 8)
+                            val sample = if ((raw and 0x8000) != 0) raw - 65536 else raw
+                            val boosted = (sample * 1.12f)
+                                .toInt()
+                                .coerceIn(-32768, 32767)
 
-                        // Keep the processing deliberately conservative. The previous
-                        // high-pass/differentiator could turn Bluetooth mic hiss into
-                        // a very loud modem-like screech.
-                        filtered += 0.74f * (inputSample - filtered)
-
-                        val processed = if (mode == PlaybackMode.BOOST) {
-                            // Mild boost after smoothing, with soft limiting.
-                            val boosted = filtered * 1.18f
-                            kotlin.math.tanh(boosted * 1.05f) / kotlin.math.tanh(1.05f)
-                        } else {
-                            // CLEAR removes some hiss/harshness by gently low-passing.
-                            // It intentionally adds no gain.
-                            filtered * 0.96f
+                            buffer[i] = (boosted and 0xFF).toByte()
+                            buffer[i + 1] = (boosted shr 8).toByte()
+                            i += 2
                         }
-
-                        val v = (processed * 32767f).toInt().coerceIn(-32768, 32767)
-                        buffer[i] = (v and 0xFF).toByte()
-                        buffer[i + 1] = (v shr 8).toByte()
-                        i += 2
                     }
 
+                    // CLEAR intentionally leaves the PCM bytes untouched for this
+                    // version. It proves the post-save processing path is not
+                    // changing the audio data before we add any more DSP.
                     out.write(buffer, 0, n)
                     remaining -= n.toLong()
                 }
