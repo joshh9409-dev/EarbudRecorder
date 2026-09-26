@@ -30,7 +30,7 @@ class MainActivity : Activity() {
 
     private var recording = false
     private var pulse: ObjectAnimator? = null
-    private var player: MediaPlayer? = null
+    private var player: PcmPlayback? = null
     private var activeFile: File? = null
     private var activePlayButton: TextView? = null
     private var activeSeek: SeekBar? = null
@@ -48,15 +48,19 @@ class MainActivity : Activity() {
     private val playbackTick = object : Runnable {
         override fun run() {
             val p = player
-            if (p != null && p.isPlaying) {
-                activeSeek?.max = p.duration.coerceAtLeast(1)
-                activeSeek?.progress = p.currentPosition.coerceIn(0, p.duration.coerceAtLeast(1))
-                activePosition?.text = formatMillis(p.currentPosition.toLong()) + " / " + formatMillis(p.duration.toLong())
-                handler.postDelayed(this, 250)
+            if (p != null && p.isPlaying()) {
+                val position = p.currentPositionMillis()
+                val total = p.durationMillis()
+                activeSeek?.max = total.coerceAtLeast(1L).toInt()
+                activeSeek?.progress = position.coerceIn(0L, total).toInt()
+                activePosition?.text = formatMillis(position) + " / " + formatMillis(total)
+                handler.postDelayed(this, 200)
             } else if (p != null) {
-                activeSeek?.max = p.duration.coerceAtLeast(1)
-                activeSeek?.progress = p.currentPosition.coerceIn(0, p.duration.coerceAtLeast(1))
-                activePosition?.text = formatMillis(p.currentPosition.toLong()) + " / " + formatMillis(p.duration.toLong())
+                val position = p.currentPositionMillis()
+                val total = p.durationMillis()
+                activeSeek?.max = total.coerceAtLeast(1L).toInt()
+                activeSeek?.progress = position.coerceIn(0L, total).toInt()
+                activePosition?.text = formatMillis(position) + " / " + formatMillis(total)
             }
         }
     }
@@ -126,11 +130,11 @@ class MainActivity : Activity() {
         val scroll = ScrollView(this).apply {
             setBackgroundColor(Color.rgb(5, 8, 16))
             isFillViewport = true
-            clipToPadding = false
+            clipToPadding = true
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(20), dp(18), dp(30))
+            setPadding(dp(18), dp(14), dp(18), dp(28))
             setBackgroundColor(Color.rgb(5, 8, 16))
         }
         scroll.addView(root)
@@ -138,28 +142,30 @@ class MainActivity : Activity() {
         scroll.setOnApplyWindowInsetsListener { _, insets ->
             if (Build.VERSION.SDK_INT >= 30) {
                 val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
-                root.setPadding(dp(18) + bars.left, dp(20) + bars.top, dp(18) + bars.right, dp(30) + bars.bottom)
+                root.setPadding(dp(18) + bars.left, dp(14) + bars.top, dp(18) + bars.right, dp(28) + bars.bottom)
             } else {
                 @Suppress("DEPRECATION")
                 root.setPadding(
                     dp(18) + insets.systemWindowInsetLeft,
-                    dp(20) + insets.systemWindowInsetTop,
+                    dp(14) + insets.systemWindowInsetTop,
                     dp(18) + insets.systemWindowInsetRight,
-                    dp(30) + insets.systemWindowInsetBottom
+                    dp(28) + insets.systemWindowInsetBottom
                 )
             }
             insets
         }
 
-        root.addView(label("ECHOLINK", 30f, Color.WHITE).apply {
+        root.addView(label("ECHOLINK", 28f, Color.WHITE).apply {
             gravity = Gravity.CENTER
             typeface = Typeface.DEFAULT_BOLD
-        }, lp(-1, 48))
+            setPadding(0, dp(2), 0, dp(2))
+        }, lp(-1, -2))
 
-        root.addView(label("BLUETOOTH EAR BUD RECORDER", 12f, 0xFF82A1B8.toInt()).apply {
+        root.addView(label("BLUETOOTH EAR BUD RECORDER", 11f, 0xFF82A1B8.toInt()).apply {
             gravity = Gravity.CENTER
-            letterSpacing = 0.16f
-        }, lp(-1, 28))
+            letterSpacing = 0.12f
+            setPadding(0, 0, 0, dp(8))
+        }, lp(-1, -2))
 
         val statusPanel = panel()
         statusContainer = LinearLayout(this).apply {
@@ -173,13 +179,13 @@ class MainActivity : Activity() {
             letterSpacing = 0.16f
             setPadding(0, dp(14), 0, 0)
         }
-        root.addView(timerCaption, lp(-1, 30))
+        root.addView(timerCaption, lp(-1, -2))
 
         timerText = label("00:00", 34f, Color.WHITE).apply {
             gravity = Gravity.CENTER
             typeface = Typeface.MONOSPACE
         }
-        root.addView(timerText, lp(-1, 48))
+        root.addView(timerText, lp(-1, -2))
 
         recordButton = TextView(this).apply {
             text = "●  START RECORDING"
@@ -188,23 +194,24 @@ class MainActivity : Activity() {
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
             background = buttonBackground(false)
-            setPadding(dp(8), 0, dp(8), 0)
+            setPadding(dp(8), dp(4), dp(8), dp(4))
+            minHeight = dp(58)
             setOnClickListener { toggleRecording() }
         }
-        root.addView(recordButton, lp(-1, 66))
+        root.addView(recordButton, lp(-1, 62))
 
         root.addView(label("INPUT MONITOR", 11f, 0xFF7890A5.toInt()).apply {
-            setPadding(dp(4), dp(16), dp(4), dp(5))
+            setPadding(dp(4), dp(14), dp(4), dp(6))
             letterSpacing = 0.12f
-        })
+        }, lp(-1, -2))
         meter = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
             progress = 0
         }
-        root.addView(meter, lp(-1, 16))
+        root.addView(meter, lp(-1, 18))
 
         liveWave = LiveWaveformView(this)
-        root.addView(liveWave, lp(-1, 54))
+        root.addView(liveWave, lp(-1, 64))
 
         val monitorNote = label(
             "Signal visualization is active only while EchoLink is recording. No captured audio is played live.",
@@ -219,7 +226,7 @@ class MainActivity : Activity() {
         })
         sensitivityLabel = label("NORMAL", 14f, 0xFFBDEBFF.toInt())
         sensitivityLabel.setPadding(dp(4), 0, dp(4), 0)
-        root.addView(sensitivityLabel, lp(-1, 30))
+        root.addView(sensitivityLabel, lp(-1, -2))
 
         val sensitivity = SeekBar(this).apply {
             max = 100
@@ -234,23 +241,26 @@ class MainActivity : Activity() {
             })
         }
         sensitivityLabel.text = sensitivityName(sensitivity.progress)
-        root.addView(sensitivity, lp(-1, 42))
+        root.addView(sensitivity, lp(-1, 48))
 
         val behaviour = panel()
         behaviour.addView(label(
             "RECORDING BEHAVIOUR",
             11f, 0xFF78A8C4.toInt()
-        ).apply { letterSpacing = 0.12f }, lp(-1, 24))
+        ).apply {
+            letterSpacing = 0.12f
+            setPadding(0, 0, 0, dp(5))
+        }, lp(-1, -2))
         behaviour.addView(label(
             "Bluetooth microphone only • no phone-mic fallback • automatic reconnect attempts • Android recording indicator stays visible • recordings stay inside EchoLink until exported or deleted.",
             11.5f, 0xFF8799AB.toInt()
         ), lp(-1, -2))
         root.addView(behaviour, lp(-1, -2))
 
-        root.addView(label("RECORDING LIBRARY", 20f, Color.WHITE).apply {
+        root.addView(label("RECORDING LIBRARY", 19f, Color.WHITE).apply {
             typeface = Typeface.DEFAULT_BOLD
-            setPadding(2, dp(14), 2, dp(5))
-        }, lp(-1, 48))
+            setPadding(2, dp(18), 2, dp(6))
+        }, lp(-1, -2))
 
         libraryContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -292,7 +302,7 @@ class MainActivity : Activity() {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(3), 0, dp(3))
+            setPadding(0, dp(4), 0, dp(4))
         }
         val left = label(title, 10.5f, 0xFF7E94A9.toInt()).apply {
             letterSpacing = 0.06f
@@ -304,8 +314,11 @@ class MainActivity : Activity() {
         }.toInt()).apply {
             gravity = Gravity.END
         }
-        row.addView(left, LinearLayout.LayoutParams(0, dp(29), 0.36f))
-        row.addView(right, LinearLayout.LayoutParams(0, dp(29), 0.64f))
+        left.maxLines = 2
+        right.maxLines = 2
+        right.setPadding(dp(4), 0, 0, 0)
+        row.addView(left, LinearLayout.LayoutParams(0, -2, 0.38f))
+        row.addView(right, LinearLayout.LayoutParams(0, -2, 0.62f))
         return row
     }
 
@@ -418,7 +431,7 @@ class MainActivity : Activity() {
         seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser && activeFile == file && player != null) {
-                    try { player?.seekTo(progress) } catch (_: Exception) {}
+                    player?.seekTo(progress.toLong())
                 }
                 if (fromUser && activeFile != file) position.text = formatMillis(progress.toLong()) + " / " + duration(file)
             }
@@ -435,10 +448,13 @@ class MainActivity : Activity() {
         }
 
         back.setOnClickListener {
-            if (activeFile == file) player?.let { p -> p.seekTo((p.currentPosition - 10000).coerceAtLeast(0)) }
+            if (activeFile == file) player?.seekTo((player?.currentPositionMillis()?.minus(10000L) ?: 0L).coerceAtLeast(0L))
         }
         fwd.setOnClickListener {
-            if (activeFile == file) player?.let { p -> p.seekTo((p.currentPosition + 10000).coerceAtMost(p.duration)) }
+            if (activeFile == file) {
+                val p = player
+                if (p != null) p.seekTo((p.currentPositionMillis() + 10000L).coerceAtMost(p.durationMillis()))
+            }
         }
         speed.setOnClickListener {
             rate = when (rate) {
@@ -448,14 +464,12 @@ class MainActivity : Activity() {
                 else -> 1f
             }
             speed.text = String.format(Locale.UK, "%.2g×", rate)
-            if (activeFile == file) {
-                try { player?.playbackParams = player!!.playbackParams.setSpeed(rate) } catch (_: Exception) {}
-            }
+            if (activeFile == file) player?.setSpeed(rate)
         }
         boost.setOnClickListener {
             boosted = !boosted
             boost.text = if (boosted) "BOOST ON" else "BOOST"
-            if (activeFile == file) setPlayerVolume(boosted)
+            if (activeFile == file) player?.setVolume(if (boosted) 1.45f else 1f)
         }
         export.setOnClickListener {
             exportFile = file
@@ -486,24 +500,45 @@ class MainActivity : Activity() {
         releasePlayer()
         try {
             repairWavIfNeeded(file)
-            player = MediaPlayer().apply {
-                setDataSource(file.absolutePath)
-                prepare()
-                setVolume(if (boosted) 1.45f else 1f, if (boosted) 1.45f else 1f)
-                if (Build.VERSION.SDK_INT >= 23) playbackParams = playbackParams.setSpeed(rate)
-                setOnCompletionListener {
-                    playButton.text = "PLAY"
-                    seek.progress = seek.max
-                    position.text = formatMillis(durationMillis(file)) + " / " + duration(file)
-                    releasePlayer()
+            val pcm = PcmPlayback(
+                file,
+                onProgress = { ms ->
+                    runOnUiThread {
+                        if (activeFile == file) {
+                            val total = pcm.durationMillis()
+                            seek.max = total.coerceAtLeast(1L).toInt()
+                            seek.progress = ms.coerceIn(0L, total).toInt()
+                            position.text = formatMillis(ms) + " / " + formatMillis(total)
+                        }
+                    }
+                },
+                onComplete = {
+                    runOnUiThread {
+                        if (activeFile == file) {
+                            seek.progress = seek.max
+                            position.text = formatMillis(pcm.durationMillis()) + " / " + formatMillis(pcm.durationMillis())
+                            releasePlayer()
+                        }
+                    }
+                },
+                onError = {
+                    runOnUiThread {
+                        releasePlayer()
+                        Toast.makeText(this, "Unable to play this recording.", Toast.LENGTH_SHORT).show()
+                    }
                 }
-                start()
-            }
+            )
+            player = pcm
             activeFile = file
             activePlayButton = playButton
             activeSeek = seek
             activePosition = position
+            seek.max = pcm.durationMillis().coerceAtLeast(1L).toInt()
+            seek.progress = 0
             playButton.text = "STOP"
+            pcm.setSpeed(rate)
+            pcm.setVolume(if (boosted) 1.45f else 1f)
+            pcm.start()
             handler.removeCallbacks(playbackTick)
             handler.post(playbackTick)
         } catch (_: Exception) {
@@ -512,17 +547,9 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun setPlayerVolume(boosted: Boolean) {
-        try {
-            val v = if (boosted) 1.45f else 1f
-            player?.setVolume(v, v)
-        } catch (_: Exception) {}
-    }
-
     private fun releasePlayer() {
         handler.removeCallbacks(playbackTick)
         try { player?.stop() } catch (_: Exception) {}
-        try { player?.release() } catch (_: Exception) {}
         player = null
         activePlayButton?.text = "PLAY"
         activeFile = null
@@ -677,7 +704,7 @@ class MainActivity : Activity() {
         text = t
         textSize = s
         setTextColor(c)
-        includeFontPadding = true
+        includeFontPadding = false
     }
 
     private fun panel() = LinearLayout(this).apply {
@@ -722,6 +749,137 @@ class MainActivity : Activity() {
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
+    private class PcmPlayback(
+        private val file: File,
+        private val onProgress: (Long) -> Unit,
+        private val onComplete: () -> Unit,
+        private val onError: () -> Unit
+    ) {
+        private val sampleRate = 16000
+        private val frameBytes = 2
+        private val dataOffset = 44L
+        private val totalDataBytes = (file.length() - dataOffset).coerceAtLeast(0L)
+        private val totalFrames = totalDataBytes / frameBytes
+        private val totalDuration = totalFrames * 1000L / sampleRate
+
+        @Volatile private var running = false
+        @Volatile private var speed = 1f
+        @Volatile private var volume = 1f
+        @Volatile private var pendingSeekMs: Long? = null
+        @Volatile private var filePositionBytes = 0L
+        private var track: AudioTrack? = null
+        private var worker: Thread? = null
+
+        fun durationMillis(): Long = totalDuration
+        fun isPlaying(): Boolean = running
+        fun currentPositionMillis(): Long =
+            ((filePositionBytes / frameBytes) * 1000L / sampleRate).coerceIn(0L, totalDuration)
+
+        fun setSpeed(value: Float) {
+            speed = value.coerceIn(0.5f, 2f)
+            try { track?.playbackRate = (sampleRate * speed).toInt() } catch (_: Exception) {}
+        }
+
+        fun setVolume(value: Float) {
+            volume = value.coerceIn(0f, 1.5f)
+            try { track?.setVolume(volume) } catch (_: Exception) {}
+        }
+
+        fun seekTo(ms: Long) {
+            pendingSeekMs = ms.coerceIn(0L, totalDuration)
+            try { track?.pause(); track?.flush(); track?.play() } catch (_: Exception) {}
+        }
+
+        fun start() {
+            if (running) return
+            val minBuffer = AudioTrack.getMinBufferSize(
+                sampleRate,
+                AudioFormat.CHANNEL_OUT_MONO,
+                AudioFormat.ENCODING_PCM_16BIT
+            )
+            if (minBuffer <= 0) throw IllegalStateException("Unsupported PCM output")
+            val bufferSize = max(minBuffer * 2, 4096)
+            val format = AudioFormat.Builder()
+                .setSampleRate(sampleRate)
+                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                .build()
+            val attrs = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .build()
+            track = AudioTrack(attrs, format, bufferSize, AudioTrack.MODE_STREAM, AudioManager.AUDIO_SESSION_ID_GENERATE)
+            track?.setVolume(volume)
+            track?.playbackRate = (sampleRate * speed).toInt()
+            running = true
+            worker = Thread { runPlayback(bufferSize) }.also {
+                it.name = "EchoLink-PcmPlayback"
+                it.start()
+            }
+        }
+
+        private fun runPlayback(bufferSize: Int) {
+            try {
+                RandomAccessFile(file, "r").use { raf ->
+                    filePositionBytes = 0L
+                    raf.seek(dataOffset)
+                    val buffer = ByteArray(bufferSize.coerceAtMost(64 * 1024))
+                    val audio = track ?: throw IllegalStateException("AudioTrack unavailable")
+                    audio.play()
+
+                    while (running) {
+                        pendingSeekMs?.let { seekMs ->
+                            pendingSeekMs = null
+                            filePositionBytes = ((seekMs * sampleRate) / 1000L) * frameBytes
+                            filePositionBytes = filePositionBytes.coerceIn(0L, totalDataBytes)
+                            raf.seek(dataOffset + filePositionBytes)
+                            try { audio.flush(); audio.play() } catch (_: Exception) {}
+                        }
+
+                        val remaining = totalDataBytes - filePositionBytes
+                        if (remaining <= 0L) break
+                        val read = raf.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
+                        if (read <= 0) break
+
+                        var written = 0
+                        while (running && written < read) {
+                            val n = audio.write(buffer, written, read - written, AudioTrack.WRITE_BLOCKING)
+                            if (n < 0) throw IllegalStateException("AudioTrack write failed: $n")
+                            written += n
+                        }
+                        filePositionBytes += written.toLong()
+                        if (written > 0) onProgress(currentPositionMillis())
+                    }
+
+                    if (running) {
+                        while (running && audio.playbackState == AudioTrack.PLAYSTATE_PLAYING &&
+                            audio.playbackHeadPosition.toLong() < totalFrames) {
+                            onProgress(currentPositionMillis())
+                            Thread.sleep(50)
+                        }
+                    }
+                }
+                val completed = running && filePositionBytes >= totalDataBytes
+                running = false
+                if (completed) onComplete()
+            } catch (_: Exception) {
+                running = false
+                onError()
+            } finally {
+                try { track?.stop() } catch (_: Exception) {}
+                try { track?.release() } catch (_: Exception) {}
+                track = null
+            }
+        }
+
+        fun stop() {
+            running = false
+            try { track?.pause(); track?.flush(); track?.stop() } catch (_: Exception) {}
+            try { worker?.interrupt() } catch (_: Exception) {}
+            worker = null
+        }
+    }
 
     class LiveWaveformView(c: Context) : View(c) {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
