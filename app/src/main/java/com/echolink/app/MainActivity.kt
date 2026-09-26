@@ -510,7 +510,7 @@ class MainActivity : Activity() {
     private fun createProcessedFile(source: File, mode: PlaybackMode): File {
         val dir = File(cacheDir, "processed").apply { mkdirs() }
         // Versioned cache names ensure older, overly aggressive processing is never reused.
-        val suffix = if (mode == PlaybackMode.BOOST) "_boost_v2" else "_clear_v2"
+        val suffix = if (mode == PlaybackMode.BOOST) "_boost_v3" else "_clear_v3"
         val target = File(dir, source.nameWithoutExtension + suffix + ".wav")
 
         RandomAccessFile(source, "r").use { input ->
@@ -521,8 +521,9 @@ class MainActivity : Activity() {
                 input.seek(44)
 
                 val buffer = ByteArray(8192)
-                var previous = 0f
-                var lowPass = 0f
+                var previousInput = 0f
+                var highPassState = 0f
+                var lowPassState = 0f
                 var remaining = size
 
                 while (remaining > 0L) {
@@ -536,19 +537,21 @@ class MainActivity : Activity() {
                         val x = sample / 32768f
 
                         val processed = if (mode == PlaybackMode.BOOST) {
-                            // Gentle speech gain. Keep headroom and use a soft knee instead
-                            // of hard clipping, which can make boosted audio sound harsh.
-                            val gain = 1.45f
-                            kotlin.math.tanh(x * gain * 1.15f) / kotlin.math.tanh(1.15f)
+                            // Moderate speech gain with plenty of headroom. BOOST must not
+                            // turn ordinary speech into a clipped, painfully loud signal.
+                            val gain = 1.25f
+                            kotlin.math.tanh(x * gain * 1.05f) / kotlin.math.tanh(1.05f)
                         } else {
-                            // "CLEAR" is a speech-cleanup mode, not a treble booster.
-                            // Use a gentle high-pass plus low-pass band to remove rumble
-                            // and very-high-frequency hiss without the old differentiator
-                            // that turned background noise into a broadband screech.
-                            val highPassed = x - previous * 0.985f
-                            previous = x
-                            lowPass += 0.22f * (highPassed - lowPass)
-                            (lowPass * 1.10f).coerceIn(-1f, 1f)
+                            // CLEAR is a gentle speech band-pass, not a treble booster.
+                            // Remove very low rumble and very high hiss while keeping the
+                            // original level essentially unchanged.
+                            val highPassed = 0.97f * (highPassState + x - previousInput)
+                            previousInput = x
+                            highPassState = highPassed
+
+                            // Approx. 4.5 kHz one-pole low-pass at 16 kHz sample rate.
+                            lowPassState += 0.64f * (highPassed - lowPassState)
+                            lowPassState.coerceIn(-1f, 1f)
                         }
 
                         val v = (processed * 32767f).toInt().coerceIn(-32768, 32767)
