@@ -229,7 +229,7 @@ class MainActivity : Activity() {
         val m=p.filter{checkSelfPermission(it)!=PackageManager.PERMISSION_GRANTED}
         if(m.isNotEmpty())requestPermissions(m.toTypedArray(),100)
     }
-    private fun label(t:String,s:Float,c:Long)=TextView(this).apply{text=t;textSize=s;setTextColor(c.toInt())}
+    private fun label(t:String,s:Float,c:Number)=TextView(this).apply{text=t;textSize=s;setTextColor(c.toInt())}
     private fun panel()=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(16,14,16,14);background=GradientDrawable().apply{cornerRadius=22f;setColor(0xFF101827.toInt());setStroke(1,0xFF203247.toInt())}}
     private fun buttonBackground(active:Boolean)=GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,if(active)intArrayOf(0xFF7D1837.toInt(),0xFF3B1024.toInt())else intArrayOf(0xFF20AEEA.toInt(),0xFF1152A0.toInt())).apply{cornerRadius=42f;setStroke(2,0xFF76E4FF.toInt())}
     private fun smallButton(t:String)=TextView(this).apply{text=t;textSize=10f;gravity=Gravity.CENTER;setTextColor(Color.WHITE);background=GradientDrawable().apply{cornerRadius=14f;setColor(0xFF16263A.toInt())}}
