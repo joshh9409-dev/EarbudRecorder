@@ -13,11 +13,6 @@ import android.view.*
 import android.widget.*
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.StateListDrawable
-import androidx.media3.common.MediaItem
-import androidx.media3.common.PlaybackException
-import androidx.media3.common.Player
-import androidx.media3.common.MimeTypes
-import androidx.media3.exoplayer.ExoPlayer
 import java.io.File
 import java.io.RandomAccessFile
 import java.util.Locale
@@ -36,7 +31,7 @@ class MainActivity : Activity() {
 
     private var recording = false
     private var pulse: ObjectAnimator? = null
-    private var player: ExoPlayer? = null
+    private var player: MediaPlayer? = null
     private var activeFile: File? = null
     private var activePlayButton: TextView? = null
     private var activeSeek: SeekBar? = null
@@ -55,10 +50,10 @@ class MainActivity : Activity() {
         override fun run() {
             val p = player
             if (p != null) {
-                val total = p.duration.coerceAtLeast(0L)
-                val position = p.currentPosition.coerceIn(0L, total)
+                val total = p.duration.toLong().coerceAtLeast(0L)
+                val position = p.currentPosition.toLong().coerceIn(0L, total)
                 activeSeek?.max = total.coerceAtLeast(1L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-                activeSeek?.progress = position.coerceIn(0L, total).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                activeSeek?.progress = position.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
                 activePosition?.text = formatMillis(position) + " / " + formatMillis(total)
                 if (p.isPlaying) handler.postDelayed(this, 200)
             }
@@ -431,46 +426,66 @@ class MainActivity : Activity() {
         releasePlayer()
         try {
             repairWavIfNeeded(file)
-            val source=if(mode==PlaybackMode.NORMAL) file else createProcessedFile(file,mode)
-            val exo=ExoPlayer.Builder(this).build()
-            exo.addListener(object : Player.Listener {
-                override fun onPlaybackStateChanged(state: Int) {
-                    if (state == Player.STATE_READY) {
-                        val total = exo.duration.coerceAtLeast(0L)
-                        seek.max = total.coerceAtLeast(1L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-                        position.text = formatMillis(exo.currentPosition) + " / " + formatMillis(total)
-                    } else if (state == Player.STATE_ENDED) {
-                        seek.progress = seek.max
-                        position.text = formatMillis(exo.duration.coerceAtLeast(0L)) + " / " + formatMillis(exo.duration.coerceAtLeast(0L))
-                        releasePlayer()
-                    }
-                }
+            val source = if (mode == PlaybackMode.NORMAL) file else createProcessedFile(file, mode)
+            val mp = MediaPlayer()
 
-                override fun onPlayerError(error: PlaybackException) {
-                    releasePlayer()
-                    Toast.makeText(this@MainActivity, "Unable to play this recording.", Toast.LENGTH_SHORT).show()
-                }
-            })
-
-            player = exo
+            player = mp
             activeFile = file
             activePlayButton = playButton
             activeSeek = seek
             activePosition = position
 
-            exo.setPlaybackSpeed(rate)
-            exo.volume=1f
-            val mediaItem = MediaItem.Builder()
-                .setUri(android.net.Uri.fromFile(source))
-                .setMimeType(MimeTypes.AUDIO_WAV)
-                .build()
-            exo.setMediaItem(mediaItem)
-            exo.prepare()
-            exo.playWhenReady = true
+            val knownDuration = durationMillis(source).coerceAtLeast(0L)
+            seek.max = knownDuration.coerceAtLeast(1L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+            seek.progress = 0
+            position.text = "00:00 / " + formatMillis(knownDuration)
 
-            playButton.text = "STOP"
-            handler.removeCallbacks(playbackTick)
-            handler.post(playbackTick)
+            mp.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            mp.setOnPreparedListener { prepared ->
+                if (player !== prepared || activeFile != file) {
+                    try { prepared.release() } catch (_: Exception) {}
+                    return@setOnPreparedListener
+                }
+
+                val total = prepared.duration.toLong().coerceAtLeast(knownDuration)
+                seek.max = total.coerceAtLeast(1L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                position.text = formatMillis(prepared.currentPosition.toLong()) + " / " + formatMillis(total)
+
+                try {
+                    if (Build.VERSION.SDK_INT >= 23) {
+                        prepared.setPlaybackParams(
+                            PlaybackParams()
+                                .setSpeed(rate.coerceIn(0.5f, 2f))
+                                .setPitch(1f)
+                        )
+                    }
+                } catch (_: Exception) {}
+
+                prepared.start()
+                playButton.text = "STOP"
+                handler.removeCallbacks(playbackTick)
+                handler.post(playbackTick)
+            }
+            mp.setOnCompletionListener {
+                seek.progress = seek.max
+                val total = mp.duration.toLong().coerceAtLeast(knownDuration)
+                position.text = formatMillis(total) + " / " + formatMillis(total)
+                releasePlayer()
+            }
+            mp.setOnErrorListener { _, _, _ ->
+                releasePlayer()
+                Toast.makeText(this@MainActivity, "Unable to play this recording.", Toast.LENGTH_SHORT).show()
+                true
+            }
+
+            mp.setDataSource(source.absolutePath)
+            mp.prepareAsync()
+            playButton.text = "LOADING"
         } catch (_: Exception) {
             releasePlayer()
             Toast.makeText(this, "Unable to play this recording.", Toast.LENGTH_SHORT).show()
@@ -495,10 +510,20 @@ class MainActivity : Activity() {
         }};return target
     }
     private fun writeWavHeader(r:RandomAccessFile,size:Long){
-        r.writeBytes("RIFF");r.writeInt(Integer.reverseBytes((36L+size).coerceAtMost(0x7FFFFFFFL).toInt()))
-        r.writeBytes("WAVEfmt ");r.writeInt(Integer.reverseBytes(16));r.writeShort(Integer.reverseBytes(1));r.writeShort(Integer.reverseBytes(1))
-        r.writeInt(Integer.reverseBytes(16000));r.writeInt(Integer.reverseBytes(32000));r.writeShort(Integer.reverseBytes(2));r.writeShort(Integer.reverseBytes(16))
-        r.writeBytes("data");r.writeInt(Integer.reverseBytes(size.coerceAtMost(0x7FFFFFFFL).toInt()))
+        val safeSize = size.coerceAtLeast(0L).coerceAtMost(0x7FFFFFFFL)
+        r.writeBytes("RIFF")
+        r.writeInt(Integer.reverseBytes((36L + safeSize).toInt()))
+        r.writeBytes("WAVE")
+        r.writeBytes("fmt ")
+        r.writeInt(Integer.reverseBytes(16))
+        r.writeShort(java.lang.Short.reverseBytes(1.toShort()).toInt())
+        r.writeShort(java.lang.Short.reverseBytes(1.toShort()).toInt())
+        r.writeInt(Integer.reverseBytes(16000))
+        r.writeInt(Integer.reverseBytes(32000))
+        r.writeShort(java.lang.Short.reverseBytes(2.toShort()).toInt())
+        r.writeShort(java.lang.Short.reverseBytes(16.toShort()).toInt())
+        r.writeBytes("data")
+        r.writeInt(Integer.reverseBytes(safeSize.toInt()))
     }
 
     private fun releasePlayer() {
@@ -574,15 +599,14 @@ class MainActivity : Activity() {
                 r.seek(8)
                 r.readFully(wave)
                 if (String(riff) != "RIFF" || String(wave) != "WAVE") return
+
+                // EchoLink recordings use the standard 44-byte PCM WAV layout.
+                // Always normalize the RIFF/data sizes to the actual file payload.
+                val actual = (file.length() - 44L).coerceAtLeast(0L).coerceAtMost(0x7FFFFFFFL)
+                r.seek(4)
+                r.writeInt(Integer.reverseBytes((36L + actual).toInt()))
                 r.seek(40)
-                val current = Integer.reverseBytes(r.readInt())
-                val actual = (file.length() - 44L).coerceAtLeast(0L)
-                if (current <= 0 && actual > 0) {
-                    r.seek(4)
-                    r.writeInt(Integer.reverseBytes((36L + actual).coerceAtMost(0x7FFFFFFFL).toInt()))
-                    r.seek(40)
-                    r.writeInt(Integer.reverseBytes(actual.coerceAtMost(0x7FFFFFFFL).toInt()))
-                }
+                r.writeInt(Integer.reverseBytes(actual.toInt()))
             }
         } catch (_: Exception) {}
     }
@@ -597,11 +621,18 @@ class MainActivity : Activity() {
                 val channels = java.lang.Short.reverseBytes(r.readShort()).toInt().coerceAtLeast(1)
                 r.seek(34)
                 val bits = java.lang.Short.reverseBytes(r.readShort()).toInt().coerceAtLeast(8)
-                r.seek(40)
-                val declared = Integer.reverseBytes(r.readInt()).toLong().coerceAtLeast(0L)
-                val bytes = if (declared > 0L && declared <= file.length() - 44L) declared else file.length() - 44L
+
+                // The data chunk is 44 bytes into EchoLink's PCM WAV files.
+                // Prefer the actual payload size so a stale/broken data-size field
+                // cannot make the UI report 00:00.
+                val bytes = (r.length() - 44L).coerceAtLeast(0L)
                 val frameBytes = (channels * bits / 8).coerceAtLeast(1)
-                return if (rate > 0) bytes * 1000L / (rate.toLong() * frameBytes) else 0L
+
+                return if (rate > 0 && bytes > 0L) {
+                    bytes * 1000L / (rate.toLong() * frameBytes)
+                } else {
+                    0L
+                }
             }
         } catch (_: Exception) {
             return 0L
