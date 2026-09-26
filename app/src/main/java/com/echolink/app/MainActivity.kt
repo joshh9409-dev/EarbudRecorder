@@ -157,6 +157,8 @@ class MainActivity : Activity() {
         currentScreen = "home"
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
             setPadding(dp(14), dp(12), dp(14), 0)
             setBackgroundColor(0xFF05060C.toInt())
             applySystemInsets(this)
@@ -165,12 +167,12 @@ class MainActivity : Activity() {
         root.addView(label("ECHOLINK", 29f, 0xFFE7E5EE.toInt()).apply {
             gravity = Gravity.CENTER
             letterSpacing = 0.03f
-        }, lp(-1, 78))
+        }, lp(-1, 84))
 
         root.addView(label("BLUETOOTH EAR BUD RECORDER", 11f, 0xFFA985C8.toInt()).apply {
             gravity = Gravity.CENTER
             letterSpacing = 0.08f
-        }, lp(-1, 50))
+        }, lp(-1, 46))
 
         val status = TextView(this).apply {
             tag = "main_status"
@@ -186,46 +188,44 @@ class MainActivity : Activity() {
             isSingleLine = true
             ellipsize = android.text.TextUtils.TruncateAt.END
         }
-        root.addView(status, lp(-1, 52))
+        root.addView(status, lp(-1, 48))
 
         val scroll = ScrollView(this).apply {
             clipToPadding = false
             setPadding(0, 0, 0, dp(4))
         }
-        val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
+        }
 
-        // The old full-width divider/waveform was visually noisy and added no
-        // useful information while idle. The microphone meter remains inside
-        // the orb during recording, so the home screen stays clean.
-        liveWave = LiveWaveformView(this)
-        liveWave.visibility = View.GONE
-        content.addView(liveWave, lp(-1, 0))
-
-        timerText = label("00:00", 48f, Color.WHITE).apply {
+        timerText = label("00:00", 46f, Color.WHITE).apply {
             gravity = Gravity.CENTER
             typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
             includeFontPadding = true
-            setPadding(0, dp(8), 0, dp(8))
+            setPadding(dp(2), dp(4), dp(2), dp(4))
         }
-        content.addView(timerText, lp(-1, 88))
+        content.addView(timerText, lp(-1, 76))
 
         recordOrb = RecordOrbView(this).apply {
             isClickable = true
             setOnClickListener { toggleRecording() }
         }
-        content.addView(recordOrb, LinearLayout.LayoutParams(-1, dp(250)))
+        content.addView(recordOrb, LinearLayout.LayoutParams(-1, dp(270)))
 
         timerCaption = label("3D RECORD ORB • READY", 15f, 0xFFA985C8.toInt()).apply {
             gravity = Gravity.CENTER
             letterSpacing = 0.05f
         }
-        timerCaption.setPadding(dp(4), dp(8), dp(4), dp(8))
-        content.addView(timerCaption, lp(-1, 54))
+        timerCaption.setPadding(dp(6), dp(4), dp(6), dp(4))
+        timerCaption.setIncludeFontPadding(true)
+        content.addView(timerCaption, lp(-1, 48))
 
         content.addView(label(
             "No captured audio is played live.",
             10.5f, 0xFF687080.toInt()
-        ).apply { gravity = Gravity.CENTER; setPadding(dp(4), dp(6), dp(4), dp(6)) }, lp(-1, 44))
+        ).apply { gravity = Gravity.CENTER; setPadding(dp(6), dp(4), dp(6), dp(4)); setIncludeFontPadding(true) }, lp(-1, 40))
 
         scroll.addView(content, LinearLayout.LayoutParams(-1, -2))
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
