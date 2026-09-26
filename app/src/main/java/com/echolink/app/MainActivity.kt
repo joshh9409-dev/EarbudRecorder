@@ -144,7 +144,8 @@ class MainActivity : Activity() {
         root.addView(timerText,lp(-1,-2))
 
         recordButton=TextView(this).apply {
-            text="MIC\nREC"; textSize=17f; gravity=Gravity.CENTER; typeface=Typeface.DEFAULT_BOLD
+            text="MIC
+REC"; textSize=17f; gravity=Gravity.CENTER; typeface=Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE); background=recordButtonBackground(false)
             setCompoundDrawablesWithIntrinsicBounds(0,android.R.drawable.ic_btn_speak_now,0,0)
             compoundDrawablePadding=dp(4); isClickable=true; isFocusable=true
@@ -471,7 +472,12 @@ class MainActivity : Activity() {
             }
         }
 
-        val export = smallButton("EXPORT").apply { minHeight = dp(40) }\n        playbackRow.addView(export, LinearLayout.LayoutParams(dp(76), dp(42)).apply {\n            setMargins(dp(2), 0, dp(2), 0)\n        })\n\n        export.setOnClickListener {
+        val export = smallButton("EXPORT").apply { minHeight = dp(40) }
+        playbackRow.addView(export, LinearLayout.LayoutParams(dp(76), dp(42)).apply {
+            setMargins(dp(2), 0, dp(2), 0)
+        })
+
+        export.setOnClickListener {
             exportFile = file
             val i = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
