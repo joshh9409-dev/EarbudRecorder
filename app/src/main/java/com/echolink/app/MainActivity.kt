@@ -168,11 +168,16 @@ class MainActivity : Activity() {
         val mic = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         val free = recordingsDir().usableSpace
         val freeText = if (free < 1024L*1024L) "${free/1024} KB" else "${free/1024/1024} MB"
-        statusText.text = "BLUETOOTH       ${if(enabled) "ONLINE" else "OFF"}\n" +
-            "EARBUD MIC      ${input ?: "NOT DETECTED"}\n" +
-            "RECORD AUDIO    ${if(mic) "GRANTED" else "NEEDED"}\n" +
-            "STORAGE         $freeText FREE\n" +
-            "ROUTING         ${if(input!=null) "BLUETOOTH INPUT" else "WAITING FOR EARBUD"}\n" +
+        statusText.text = "BLUETOOTH       ${if(enabled) "ONLINE" else "OFF"}
+" +
+            "EARBUD MIC      ${input ?: "NOT DETECTED"}
+" +
+            "RECORD AUDIO    ${if(mic) "GRANTED" else "NEEDED"}
+" +
+            "STORAGE         $freeText FREE
+" +
+            "ROUTING         ${if(input!=null) "BLUETOOTH INPUT" else "WAITING FOR EARBUD"}
+" +
             "READY           ${if(enabled && mic && input!=null) "EARBUD MICROPHONE READY" else "CONNECT EARBUD WITH MIC"}"
         recordButton.isEnabled = recording || (enabled && mic && input != null)
         recordButton.alpha = if(recordButton.isEnabled) 1f else .45f
@@ -215,11 +220,21 @@ class MainActivity : Activity() {
             if(Build.VERSION.SDK_INT>=23) player?.let { it.playbackParams = it.playbackParams.setSpeed(rate) }
         }
         boost.setOnClickListener{boosted=!boosted;boost.text=if(boosted)"BOOST ON" else "BOOST";player?.setVolume(if(boosted)1.5f else 1f,if(boosted)1.5f else 1f)}
-        export.setOnClickListener { exportFile=file; startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply { addCategory(Intent.CATEGORY_OPENABLE); type="audio/wav"; putExtra(Intent.EXTRA_TITLE,file.name) }, 400) }\n        del.setOnClickListener{player?.release();player=null;if(file.delete())refreshLibrary()}
+        export.setOnClickListener { exportFile=file; startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply { addCategory(Intent.CATEGORY_OPENABLE); type="audio/wav"; putExtra(Intent.EXTRA_TITLE,file.name) }, 400) }
+        del.setOnClickListener{player?.release();player=null;if(file.delete())refreshLibrary()}
         libraryContainer.addView(card,lp(-1,-2))
     }
 
-    override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?){\n        super.onActivityResult(requestCode,resultCode,data)\n        if(requestCode==400 && resultCode==RESULT_OK && data?.data!=null && exportFile!=null){\n            try{ contentResolver.openOutputStream(data.data!!)?.use{out->exportFile!!.inputStream().use{input->input.copyTo(out)}}; Toast.makeText(this,"Recording exported",Toast.LENGTH_SHORT).show() }\n            catch(_:Exception){ Toast.makeText(this,"Export failed",Toast.LENGTH_SHORT).show() }\n            finally{exportFile=null}\n        }\n    }\n\n    private fun duration(file:File):String=try{RandomAccessFile(file,"r").use{r->r.seek(24);val rate=Integer.reverseBytes(r.readInt());r.seek(40);val bytes=Integer.reverseBytes(r.readInt()).toLong();val s=if(rate>0)bytes/(rate*2L) else 0;"%02d:%02d".format(Locale.UK,s/60,s%60)}}catch(_:Exception){"00:00"}
+    override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?){
+        super.onActivityResult(requestCode,resultCode,data)
+        if(requestCode==400 && resultCode==RESULT_OK && data?.data!=null && exportFile!=null){
+            try{ contentResolver.openOutputStream(data.data!!)?.use{out->exportFile!!.inputStream().use{input->input.copyTo(out)}}; Toast.makeText(this,"Recording exported",Toast.LENGTH_SHORT).show() }
+            catch(_:Exception){ Toast.makeText(this,"Export failed",Toast.LENGTH_SHORT).show() }
+            finally{exportFile=null}
+        }
+    }
+
+    private fun duration(file:File):String=try{RandomAccessFile(file,"r").use{r->r.seek(24);val rate=Integer.reverseBytes(r.readInt());r.seek(40);val bytes=Integer.reverseBytes(r.readInt()).toLong();val s=if(rate>0)bytes/(rate*2L) else 0;"%02d:%02d".format(Locale.UK,s/60,s%60)}}catch(_:Exception){"00:00"}
     private fun recordingsDir()=File(getExternalFilesDir("recordings") ?: filesDir,"recordings").apply{mkdirs()}
 
     private fun findBluetoothInput():AudioDeviceInfo?{
@@ -243,7 +258,14 @@ class MainActivity : Activity() {
     private fun sensitivityName(p:Int)=when{p<20->"Normal";p<40->"High";p<60->"Very High";p<80->"Extreme";else->"Extreme+"}
     private fun formatSize(b:Long)=if(b>=1024*1024)"%.1f MB".format(Locale.UK,b/1024f/1024f) else "${b/1024} KB"
 
-    class LiveWaveformView(c:Context):View(c){\n        private val paint=Paint(Paint.ANTI_ALIAS_FLAG).apply{color=0xFF64D8FF.toInt();strokeWidth=4f}\n        private val levels=FloatArray(72)\n        fun setLevel(v:Float){System.arraycopy(levels,1,levels,0,levels.size-1);levels[levels.lastIndex]=v.coerceIn(0f,1f);invalidate()}\n        override fun onDraw(c:Canvas){super.onDraw(c);val mid=height/2f;val step=width/levels.size.toFloat();levels.forEachIndexed{i,v->val h=(v*height*.9f).coerceAtLeast(2f);c.drawLine(i*step,mid-h/2,i*step,mid+h/2,paint)}}\n    }\n\n    class WaveformView(c:Context):View(c){
+    class LiveWaveformView(c:Context):View(c){
+        private val paint=Paint(Paint.ANTI_ALIAS_FLAG).apply{color=0xFF64D8FF.toInt();strokeWidth=4f}
+        private val levels=FloatArray(72)
+        fun setLevel(v:Float){System.arraycopy(levels,1,levels,0,levels.size-1);levels[levels.lastIndex]=v.coerceIn(0f,1f);invalidate()}
+        override fun onDraw(c:Canvas){super.onDraw(c);val mid=height/2f;val step=width/levels.size.toFloat();levels.forEachIndexed{i,v->val h=(v*height*.9f).coerceAtLeast(2f);c.drawLine(i*step,mid-h/2,i*step,mid+h/2,paint)}}
+    }
+
+    class WaveformView(c:Context):View(c){
         private val paint=Paint(Paint.ANTI_ALIAS_FLAG).apply{color=0xFF36CFFF.toInt();strokeWidth=3f}
         private var levels=FloatArray(0)
         fun load(f:File){try{RandomAccessFile(f,"r").use{r->if(r.length()<44)return;r.seek(44);val samples=(r.length()-44)/2;val count=90;levels=FloatArray(count)
