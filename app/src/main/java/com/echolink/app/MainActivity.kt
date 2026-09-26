@@ -304,7 +304,7 @@ class MainActivity : Activity() {
             setHintTextColor(0xFF756A82.toInt())
             setTextColor(Color.WHITE)
             textSize = 12f
-            singleLine = true
+            setSingleLine(true)
             setPadding(dp(14), 0, dp(14), 0)
             background = GradientDrawable().apply {
                 cornerRadius = dp(14).toFloat()
