@@ -51,7 +51,7 @@ class MainActivity : Activity() {
             if (p != null && p.isPlaying) {
                 activeSeek?.max = p.duration.coerceAtLeast(1)
                 activeSeek?.progress = p.currentPosition.coerceIn(0, p.duration.coerceAtLeast(1))
-                activePosition?.text = formatMillis(p.currentPosition) + " / " + formatMillis(p.duration)
+                activePosition?.text = formatMillis(p.currentPosition.toLong()) + " / " + formatMillis(p.duration.toLong())
                 handler.postDelayed(this, 250)
             } else if (p != null) {
                 activeSeek?.max = p.duration.coerceAtLeast(1)
