@@ -1005,8 +1005,17 @@ class MainActivity : Activity() {
         isFocusable = true
     }
 
-    private fun lp(w: Int, h: Int) = LinearLayout.LayoutParams(w, h).apply {
-        setMargins(0, dp(4), 0, dp(4))
+    private fun lp(w: Int, h: Int): LinearLayout.LayoutParams {
+        // Width/height values in the UI are specified in dp. Preserve the
+        // special MATCH_PARENT/WRAP_CONTENT values while converting real
+        // dimensions. The previous implementation treated heights as raw
+        // pixels, which caused large text such as ECHOLINK and the timer to
+        // be vertically clipped on high-density phones.
+        val resolvedWidth = if (w < 0) w else dp(w)
+        val resolvedHeight = if (h < 0) h else dp(h)
+        return LinearLayout.LayoutParams(resolvedWidth, resolvedHeight).apply {
+            setMargins(0, dp(4), 0, dp(4))
+        }
     }
 
     private fun compactLp(w: Int, h: Int) = LinearLayout.LayoutParams(w, dp(h)).apply {
