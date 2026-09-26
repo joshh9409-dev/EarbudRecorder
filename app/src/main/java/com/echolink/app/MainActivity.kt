@@ -461,7 +461,7 @@ class MainActivity : Activity() {
             }
         }
 
-        export.setOnClickListener {
+        val export = smallButton("EXPORT").apply { minHeight = dp(40) }\n        playbackRow.addView(export, LinearLayout.LayoutParams(dp(76), dp(42)).apply {\n            setMargins(dp(2), 0, dp(2), 0)\n        })\n\n        export.setOnClickListener {
             exportFile = file
             val i = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
@@ -470,12 +470,6 @@ class MainActivity : Activity() {
             }
             startActivityForResult(i, 400)
         }
-        del.setOnClickListener {
-            if (activeFile == file) releasePlayer()
-            if (file.delete()) refreshLibrary()
-            else Toast.makeText(this, "Could not delete recording", Toast.LENGTH_SHORT).show()
-        }
-
         libraryContainer.addView(card, lp(-1, -2))
     }
 
