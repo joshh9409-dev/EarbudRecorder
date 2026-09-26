@@ -481,7 +481,6 @@ class MainActivity : Activity() {
         }
         val items = listOf(
             Triple("▰", "Library") { showLibraryScreen() },
-            Triple("⚙", "Settings") { showSettingsScreen() },
             Triple("◖))", "Volume") { showVolumeScreen() }
         )
         items.forEachIndexed { index, item ->
