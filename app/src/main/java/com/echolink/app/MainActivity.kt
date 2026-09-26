@@ -419,6 +419,16 @@ class MainActivity : Activity() {
         }
         adjustments.addView(playbackRow, lp(-1, dp(50)))
 
+        val deleteButton = smallButton("DELETE").apply { minHeight = dp(40) }
+        playbackRow.addView(deleteButton, LinearLayout.LayoutParams(dp(76), dp(42)).apply {
+            setMargins(dp(2), 0, dp(2), 0)
+        })
+        deleteButton.setOnClickListener {
+            if (activeFile == file) releasePlayer()
+            if (file.delete()) refreshLibrary()
+            else Toast.makeText(this, "Could not delete recording", Toast.LENGTH_SHORT).show()
+        }
+
         card.addView(adjustments, lp(-1, -2))
 
 
