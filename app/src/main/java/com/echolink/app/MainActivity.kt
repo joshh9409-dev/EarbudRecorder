@@ -454,7 +454,7 @@ class MainActivity : Activity() {
             if (mode == PlaybackMode.BOOST) {
                 // Playback-only boost avoids rewriting PCM and makes the change
                 // immediately audible without introducing digital artifacts.
-                mp.setVolume(2.0f, 2.0f)
+                mp.setVolume(6.0f, 6.0f)
             } else {
                 mp.setVolume(1.0f, 1.0f)
             }
