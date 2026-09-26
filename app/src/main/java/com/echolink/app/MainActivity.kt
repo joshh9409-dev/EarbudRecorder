@@ -12,6 +12,7 @@ import android.os.*
 import android.view.*
 import android.widget.*
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.StateListDrawable
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -19,6 +20,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import java.io.File
 import java.io.RandomAccessFile
 import java.util.Locale
+import java.util.concurrent.Executors
 import kotlin.math.abs
 import kotlin.math.max
 
@@ -30,7 +32,6 @@ class MainActivity : Activity() {
     private lateinit var meter: ProgressBar
     private lateinit var liveWave: LiveWaveformView
     private lateinit var libraryContainer: LinearLayout
-    private lateinit var sensitivityLabel: TextView
 
     private var recording = false
     private var pulse: ObjectAnimator? = null
@@ -40,12 +41,12 @@ class MainActivity : Activity() {
     private var activeSeek: SeekBar? = null
     private var activePosition: TextView? = null
     private var exportFile: File? = null
+    private val processorExecutor = Executors.newSingleThreadExecutor()
 
     private val handler = Handler(Looper.getMainLooper())
     private val refresh = object : Runnable {
         override fun run() {
             refreshStatus()
-            if (!recording) refreshLibrary()
             handler.postDelayed(this, 1800)
         }
     }
@@ -120,207 +121,89 @@ class MainActivity : Activity() {
         handler.removeCallbacksAndMessages(null)
         pulse?.cancel()
         releasePlayer()
+        processorExecutor.shutdownNow()
         try { getSystemService(AudioManager::class.java).unregisterAudioDeviceCallback(audioDeviceCallback) } catch (_: Exception) {}
         super.onDestroy()
     }
 
     private fun buildUi() {
-        val scroll = ScrollView(this).apply {
-            setBackgroundColor(Color.rgb(5, 8, 16))
-            isFillViewport = true
-            clipToPadding = false
-            overScrollMode = View.OVER_SCROLL_NEVER
-        }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(18), dp(18), dp(24))
+            setPadding(dp(18), dp(18), dp(18), dp(18))
             setBackgroundColor(Color.rgb(5, 8, 16))
         }
-        scroll.addView(root)
+        root.addView(label("ECHOLINK", 28f, Color.WHITE).apply { gravity=Gravity.CENTER; typeface=Typeface.DEFAULT_BOLD }, lp(-1,-2))
+        root.addView(label("BLUETOOTH EAR BUD RECORDER",11f,0xFF82A1B8.toInt()).apply {
+            gravity=Gravity.CENTER; letterSpacing=0.12f; setPadding(0,0,0,dp(8))
+        },lp(-1,-2))
 
-        scroll.setOnApplyWindowInsetsListener { _, insets ->
-            if (Build.VERSION.SDK_INT >= 30) {
-                val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
-                root.setPadding(dp(18) + bars.left, dp(18) + bars.top, dp(18) + bars.right, dp(24) + bars.bottom)
-            } else {
-                @Suppress("DEPRECATION")
-                root.setPadding(
-                    dp(18) + insets.systemWindowInsetLeft,
-                    dp(42) + insets.systemWindowInsetTop,
-                    dp(18) + insets.systemWindowInsetRight,
-                    dp(32) + insets.systemWindowInsetBottom
-                )
-            }
-            insets
-        }
+        val statusPanel=panel().apply { setPadding(dp(12),dp(8),dp(12),dp(8)) }
+        statusContainer=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
+        statusPanel.addView(statusContainer,lp(-1,-2))
+        root.addView(statusPanel,lp(-1,-2))
 
-        root.addView(label("ECHOLINK", 28f, Color.WHITE).apply {
-            gravity = Gravity.CENTER
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, dp(2), 0, dp(2))
-        }, lp(-1, -2))
+        timerCaption=label("READY",11f,0xFF7890A5.toInt()).apply { gravity=Gravity.CENTER; letterSpacing=0.16f }
+        root.addView(timerCaption,lp(-1,-2))
+        timerText=label("00:00",30f,Color.WHITE).apply { gravity=Gravity.CENTER; typeface=Typeface.MONOSPACE }
+        root.addView(timerText,lp(-1,-2))
 
-        root.addView(label("BLUETOOTH EAR BUD RECORDER", 11f, 0xFF82A1B8.toInt()).apply {
-            gravity = Gravity.CENTER
-            letterSpacing = 0.12f
-            setPadding(0, 0, 0, dp(8))
-        }, lp(-1, -2))
-
-        val statusPanel = panel()
-        statusContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-        statusPanel.addView(statusContainer, lp(-1, -2))
-        root.addView(statusPanel, lp(-1, -2))
-
-        timerCaption = label("READY", 11f, 0xFF7890A5.toInt()).apply {
-            gravity = Gravity.CENTER
-            letterSpacing = 0.16f
-            setPadding(0, dp(14), 0, 0)
-        }
-        root.addView(timerCaption, lp(-1, -2))
-
-        timerText = label("00:00", 34f, Color.WHITE).apply {
-            gravity = Gravity.CENTER
-            typeface = Typeface.MONOSPACE
-        }
-        root.addView(timerText, lp(-1, -2))
-
-        recordButton = TextView(this).apply {
-            text = "●  START RECORDING"
-            textSize = 18f
-            gravity = Gravity.CENTER
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            background = buttonBackground(false)
-            setPadding(dp(8), dp(4), dp(8), dp(4))
-            minHeight = dp(58)
+        recordButton=TextView(this).apply {
+            text="MIC\nREC"; textSize=17f; gravity=Gravity.CENTER; typeface=Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE); background=recordButtonBackground(false)
+            setCompoundDrawablesWithIntrinsicBounds(0,android.R.drawable.ic_btn_speak_now,0,0)
+            compoundDrawablePadding=dp(4); isClickable=true; isFocusable=true
             setOnClickListener { toggleRecording() }
         }
-        root.addView(recordButton, lp(-1, 72))
-
-        root.addView(label("INPUT MONITOR", 11f, 0xFF7890A5.toInt()).apply {
-            setPadding(dp(4), dp(14), dp(4), dp(6))
-            letterSpacing = 0.12f
-        }, lp(-1, -2))
-        meter = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-            max = 100
-            progress = 0
-        }
-        root.addView(meter, lp(-1, 18))
-
-        liveWave = LiveWaveformView(this)
-        root.addView(liveWave, lp(-1, 64))
-
-        val monitorNote = label(
-            "Signal visualization is active only while EchoLink is recording. No captured audio is played live.",
-            11.5f, 0xFF71849A.toInt()
-        )
-        monitorNote.setPadding(dp(4), 0, dp(4), dp(6))
-        root.addView(monitorNote, lp(-1, -2))
-
-        root.addView(label("RECORDING SENSITIVITY", 11f, 0xFF7890A5.toInt()).apply {
-            setPadding(dp(4), dp(10), dp(4), 0)
-            letterSpacing = 0.12f
+        root.addView(recordButton,LinearLayout.LayoutParams(dp(164),dp(164)).apply {
+            gravity=Gravity.CENTER_HORIZONTAL; setMargins(0,dp(6),0,dp(10))
         })
-        sensitivityLabel = label("NORMAL", 14f, 0xFFBDEBFF.toInt())
-        sensitivityLabel.setPadding(dp(4), 0, dp(4), 0)
-        root.addView(sensitivityLabel, lp(-1, -2))
 
-        val sensitivity = SeekBar(this).apply {
-            max = 100
-            progress = getPreferences(MODE_PRIVATE).getInt("sensitivity", 0)
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                    sensitivityLabel.text = sensitivityName(p)
-                    if (fromUser) getPreferences(MODE_PRIVATE).edit().putInt("sensitivity", p).apply()
-                }
-                override fun onStartTrackingTouch(s: SeekBar?) {}
-                override fun onStopTrackingTouch(s: SeekBar?) {}
-            })
-        }
-        sensitivityLabel.text = sensitivityName(sensitivity.progress)
-        root.addView(sensitivity, lp(-1, 48))
+        root.addView(label("INPUT MONITOR",11f,0xFF7890A5.toInt()).apply {
+            setPadding(dp(4),dp(2),dp(4),dp(4)); letterSpacing=0.12f
+        },lp(-1,-2))
+        meter=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; progress=0 }
+        root.addView(meter,lp(-1,14))
+        liveWave=LiveWaveformView(this)
+        root.addView(liveWave,lp(-1,48))
+        root.addView(label("No captured audio is played live.",11f,0xFF71849A.toInt()).apply {
+            setPadding(dp(4),0,dp(4),dp(4))
+        },lp(-1,-2))
 
-        val behaviour = panel()
+        val behaviour=panel()
+        behaviour.addView(label("RECORDING",11f,0xFF78A8C4.toInt()).apply { letterSpacing=0.12f },lp(-1,-2))
         behaviour.addView(label(
-            "RECORDING BEHAVIOUR",
-            11f, 0xFF78A8C4.toInt()
-        ).apply {
-            letterSpacing = 0.12f
-            setPadding(0, 0, 0, dp(5))
-        }, lp(-1, -2))
-        behaviour.addView(label(
-            "Bluetooth microphone only • no phone-mic fallback • automatic reconnect attempts • Android recording indicator stays visible • recordings stay inside EchoLink until exported or deleted.",
-            11.5f, 0xFF8799AB.toInt()
-        ), lp(-1, -2))
-        root.addView(behaviour, lp(-1, -2))
+            "Bluetooth microphone only • no phone-mic fallback • automatic reconnect • Android recording indicator remains visible.",
+            11.5f,0xFF8799AB.toInt()
+        ),lp(-1,-2))
+        root.addView(behaviour,lp(-1,-2))
 
-        root.addView(label("RECORDING LIBRARY", 19f, Color.WHITE).apply {
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(2, dp(18), 2, dp(6))
-        }, lp(-1, -2))
+        root.addView(label("RECORDING LIBRARY",19f,Color.WHITE).apply {
+            typeface=Typeface.DEFAULT_BOLD; setPadding(2,dp(10),2,dp(5))
+        },lp(-1,-2))
 
-        libraryContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-        root.addView(libraryContainer, lp(-1, -2))
-
-        setContentView(scroll)
-        scroll.requestApplyInsets()
+        val libraryScroll=ScrollView(this).apply { overScrollMode=View.OVER_SCROLL_IF_CONTENT_SCROLLS; clipToPadding=false }
+        libraryContainer=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
+        libraryScroll.addView(libraryContainer,LinearLayout.LayoutParams(-1,-2))
+        root.addView(libraryScroll,LinearLayout.LayoutParams(-1,0,1f))
+        setContentView(root)
     }
 
     private fun refreshStatus() {
         if (!::statusContainer.isInitialized) return
-
-        val enabled = BluetoothAdapter.getDefaultAdapter()?.isEnabled == true
-        val input = findBluetoothInput()
-        val micPermission = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        val free = recordingsDir().usableSpace
-        val deviceName = input?.let { friendlyDeviceName(it) } ?: "Not detected"
-        val route = if (input != null) "Bluetooth input" else "Waiting for earbud"
-        val inputInfo = input?.let { technicalInputInfo(it) } ?: "No Bluetooth input exposed"
-        val ready = enabled && micPermission && input != null
-
+        val enabled=BluetoothAdapter.getDefaultAdapter()?.isEnabled==true
+        val input=findBluetoothInput()
+        val permission=checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED
+        val connected=enabled && permission && input!=null
         statusContainer.removeAllViews()
-        statusContainer.addView(statusRow("BLUETOOTH", if (enabled) "CONNECTED" else "OFFLINE", enabled))
-        statusContainer.addView(statusRow("EARBUD MIC", deviceName, input != null))
-        statusContainer.addView(statusRow("AUDIO ROUTE", route, input != null))
-        statusContainer.addView(statusRow("INPUT FORMAT", inputInfo, input != null))
-        statusContainer.addView(statusRow("RECORD AUDIO", if (micPermission) "GRANTED" else "PERMISSION NEEDED", micPermission))
-        statusContainer.addView(statusRow("STORAGE", formatFreeSpace(free) + " free", free > 5L * 1024 * 1024))
-        statusContainer.addView(statusRow("EARBUD BATTERY", "Not exposed by Android", null))
-        statusContainer.addView(statusRow("BT SIGNAL", "Not exposed by Android", null))
-        statusContainer.addView(statusRow("STATUS", if (ready) "EARBUD MICROPHONE READY" else "CONNECT EARBUD WITH MIC", ready))
-
-        recordButton.isEnabled = recording || ready
-        recordButton.alpha = if (recordButton.isEnabled) 1f else 0.42f
-    }
-
-    private fun statusRow(title: String, value: String, good: Boolean?): LinearLayout {
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(5), 0, dp(5))
-            minimumHeight = dp(34)
-        }
-        val left = label(title, 10.5f, 0xFF7E94A9.toInt()).apply {
-            letterSpacing = 0.06f
-        }
-        val right = label(value, 12.5f, when (good) {
-            true -> 0xFFBDEBFF.toInt()
-            false -> 0xFFFF8F9F.toInt()
-            null -> 0xFF94A4B3.toInt()
-        }.toInt()).apply {
-            gravity = Gravity.END
-        }
-        left.maxLines = 2
-        right.maxLines = 2
-        right.ellipsize = null
-        right.setPadding(dp(4), 0, 0, 0)
-        row.addView(left, LinearLayout.LayoutParams(0, -2, 0.38f))
-        row.addView(right, LinearLayout.LayoutParams(0, -2, 0.62f))
-        return row
+        val row=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL; minimumHeight=dp(36) }
+        row.addView(label("●",15f,if(connected)0xFF54E6A7.toInt() else 0xFFFF687D.toInt()),LinearLayout.LayoutParams(dp(22),-2))
+        row.addView(label(if(connected)"CONNECTED" else "NOT CONNECTED",13f,if(connected)0xFFBDEBFF.toInt() else 0xFFFFA0AD.toInt()).apply{typeface=Typeface.DEFAULT_BOLD},LinearLayout.LayoutParams(0,-2,0.42f))
+        row.addView(label(if(connected)(input?.let{friendlyDeviceName(it)}?:"Bluetooth microphone ready") else "Connect earbuds with a microphone",11f,0xFF7F95AA.toInt()).apply{
+            gravity=Gravity.END; maxLines=1; ellipsize=android.text.TextUtils.TruncateAt.END
+        },LinearLayout.LayoutParams(0,-2,0.58f))
+        statusContainer.addView(row)
+        recordButton.isEnabled=recording||connected
+        recordButton.alpha=if(recordButton.isEnabled)1f else .42f
     }
 
     private fun toggleRecording() {
@@ -332,7 +215,6 @@ class MainActivity : Activity() {
             }
             val i = Intent(this, RecordingService::class.java)
                 .setAction(RecordingService.START)
-                .putExtra(RecordingService.EXTRA_SENSITIVITY, getPreferences(MODE_PRIVATE).getInt("sensitivity", 0))
             if (Build.VERSION.SDK_INT >= 26) startForegroundService(i) else startService(i)
         } else {
             startService(Intent(this, RecordingService::class.java).setAction(RecordingService.STOP))
@@ -349,7 +231,7 @@ class MainActivity : Activity() {
         if (recording) {
             timerCaption.text = "RECORDING • BLUETOOTH MICROPHONE"
             recordButton.text = "■  STOP & SAVE"
-            recordButton.background = buttonBackground(true)
+            recordButton.background = recordButtonBackground(true)
             if (pulse == null) {
                 pulse = ObjectAnimator.ofFloat(recordButton, View.ALPHA, 1f, .72f, 1f).apply {
                     duration = 1100
@@ -360,7 +242,7 @@ class MainActivity : Activity() {
         } else {
             timerCaption.text = "READY"
             recordButton.text = "●  START RECORDING"
-            recordButton.background = buttonBackground(false)
+            recordButton.background = recordButtonBackground(false)
             pulse?.cancel()
             pulse = null
             recordButton.alpha = if (recordButton.isEnabled) 1f else .42f
@@ -381,10 +263,7 @@ class MainActivity : Activity() {
             return
         }
 
-        files.forEach {
-            repairWavIfNeeded(it)
-            addRecordingCard(it)
-        }
+        files.forEach { addRecordingCard(it) }
     }
 
     private fun addRecordingCard(file: File) {
@@ -402,8 +281,8 @@ class MainActivity : Activity() {
         ), lp(-1, -2))
 
         val wave = WaveformView(this)
-        wave.load(file)
-        card.addView(wave, compactLp(-1, 58))
+        card.addView(wave, compactLp(-1,58))
+        processorExecutor.execute { wave.load(file); runOnUiThread { if (wave.isAttachedToWindow) wave.invalidate() } }
 
         val position = label("00:00 / " + duration(file), 10.5f, 0xFF8195A8.toInt()).apply {
             setPadding(0, dp(3), 0, 0)
@@ -435,14 +314,16 @@ class MainActivity : Activity() {
             clipChildren = false
             clipToPadding = false
         }
-        val boost = smallButton("BOOST")
-        val export = smallButton("EXPORT")
-        val del = smallButton("DELETE")
-        listOf(boost, export, del).forEach { row2.addView(it, rowButtonLp()) }
+        val normal=smallButton("NORMAL")
+        val boost=smallButton("BOOST")
+        val clear=smallButton("CLEAR")
+        val export=smallButton("EXPORT")
+        val del=smallButton("DELETE")
+        listOf(normal,boost,clear,export,del).forEach{row2.addView(it,rowButtonLp())}
         card.addView(row2, controlRowLp())
 
         var rate = 1f
-        var boosted = false
+        var playbackMode = PlaybackMode.NORMAL
 
         seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -460,7 +341,7 @@ class MainActivity : Activity() {
                 releasePlayer()
                 return@setOnClickListener
             }
-            startPlayback(file, play, seek, position, rate, boosted)
+            startPlayback(file, play, seek, position, rate, playbackMode)
         }
 
         back.setOnClickListener {
@@ -482,11 +363,9 @@ class MainActivity : Activity() {
             speed.text = String.format(Locale.UK, "%.2g×", rate)
             if (activeFile == file) player?.setPlaybackSpeed(rate)
         }
-        boost.setOnClickListener {
-            boosted = !boosted
-            boost.text = if (boosted) "BOOST ON" else "BOOST"
-            if (activeFile == file) player?.volume = if (boosted) 1f else 1f
-        }
+        normal.setOnClickListener { playbackMode=PlaybackMode.NORMAL; boost.text="BOOST"; clear.text="CLEAR"; if(activeFile==file) restartProcessedPlayback(file,play,seek,position,rate,playbackMode) }
+        boost.setOnClickListener { playbackMode=PlaybackMode.BOOST; boost.text="BOOST ✓"; clear.text="CLEAR"; if(activeFile==file) restartProcessedPlayback(file,play,seek,position,rate,playbackMode) else startPlayback(file,play,seek,position,rate,playbackMode) }
+        clear.setOnClickListener { playbackMode=PlaybackMode.CLEAR; clear.text="CLEAR ✓"; boost.text="BOOST"; if(activeFile==file) restartProcessedPlayback(file,play,seek,position,rate,playbackMode) else startPlayback(file,play,seek,position,rate,playbackMode) }
         export.setOnClickListener {
             exportFile = file
             val i = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
@@ -511,12 +390,13 @@ class MainActivity : Activity() {
         seek: SeekBar,
         position: TextView,
         rate: Float,
-        boosted: Boolean
+        mode: PlaybackMode
     ) {
         releasePlayer()
         try {
             repairWavIfNeeded(file)
-            val exo = ExoPlayer.Builder(this).build()
+            val source=if(mode==PlaybackMode.NORMAL) file else createProcessedFile(file,mode)
+            val exo=ExoPlayer.Builder(this).build()
             exo.addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(state: Int) {
                     if (state == Player.STATE_READY) {
@@ -543,8 +423,8 @@ class MainActivity : Activity() {
             activePosition = position
 
             exo.setPlaybackSpeed(rate)
-            exo.volume = if (boosted) 1f else 1f
-            exo.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(file)))
+            exo.volume=1f
+            exo.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(source)))
             exo.prepare()
             exo.playWhenReady = true
 
@@ -555,6 +435,30 @@ class MainActivity : Activity() {
             releasePlayer()
             Toast.makeText(this, "Unable to play this recording.", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private enum class PlaybackMode { NORMAL, BOOST, CLEAR }
+    private fun restartProcessedPlayback(file:File,playButton:TextView,seek:SeekBar,position:TextView,rate:Float,mode:PlaybackMode){
+        releasePlayer(); startPlayback(file,playButton,seek,position,rate,mode)
+    }
+    private fun createProcessedFile(source:File,mode:PlaybackMode):File{
+        val dir=File(cacheDir,"processed").apply{mkdirs()}
+        val target=File(dir,source.nameWithoutExtension+(if(mode==PlaybackMode.BOOST)"_boost" else "_clear")+".wav")
+        if(target.exists()&&target.lastModified()>=source.lastModified())return target
+        RandomAccessFile(source,"r").use{input->val size=(input.length()-44L).coerceAtLeast(0L);RandomAccessFile(target,"rw").use{out->
+            out.setLength(0); writeWavHeader(out,size); input.seek(44); val b=ByteArray(8192); var prev=0f; var rem=size
+            while(rem>0){val n=input.read(b,0,minOf(b.size.toLong(),rem).toInt());if(n<=0)break;var i=0
+                while(i+1<n){val raw=(b[i].toInt() and 255) or (b[i+1].toInt() shl 8);val sample=if(raw and 0x8000!=0)raw-65536 else raw;var x=sample/32768f
+                    if(mode==PlaybackMode.CLEAR){val hp=x-prev*0.995f;prev=x;x=hp}else{x=kotlin.math.tanh(x*1.8f)/kotlin.math.tanh(1.8f)}
+                    val v=(x*32767f).toInt().coerceIn(-32768,32767);b[i]=(v and 255).toByte();b[i+1]=(v shr 8).toByte();i+=2}
+                out.write(b,0,n);rem-=n}
+        }};return target
+    }
+    private fun writeWavHeader(r:RandomAccessFile,size:Long){
+        r.writeBytes("RIFF");r.writeInt(Integer.reverseBytes((36L+size).coerceAtMost(0x7FFFFFFFL).toInt()))
+        r.writeBytes("WAVEfmt ");r.writeInt(Integer.reverseBytes(16));r.writeShort(Integer.reverseBytes(1));r.writeShort(Integer.reverseBytes(1))
+        r.writeInt(Integer.reverseBytes(16000));r.writeInt(Integer.reverseBytes(32000));r.writeShort(Integer.reverseBytes(2));r.writeShort(Integer.reverseBytes(16))
+        r.writeBytes("data");r.writeInt(Integer.reverseBytes(size.coerceAtMost(0x7FFFFFFFL).toInt()))
     }
 
     private fun releasePlayer() {
@@ -727,15 +631,14 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun buttonBackground(active: Boolean) =
-        GradientDrawable(
-            GradientDrawable.Orientation.TOP_BOTTOM,
-            if (active) intArrayOf(0xFFE14D70.toInt(), 0xFF76182F.toInt())
-            else intArrayOf(0xFF29C3F4.toInt(), 0xFF1056A4.toInt())
-        ).apply {
-            cornerRadius = dp(34).toFloat()
-            setStroke(dp(1), 0xFF7AE9FF.toInt())
-        }
+    private fun recordButtonBackground(active:Boolean)=GradientDrawable(
+        GradientDrawable.Orientation.TOP_BOTTOM,
+        if(active)intArrayOf(0xFFE14D70.toInt(),0xFF76182F.toInt()) else intArrayOf(0xFF29C3F4.toInt(),0xFF1056A4.toInt())
+    ).apply{shape=GradientDrawable.OVAL;setStroke(dp(2),0xFF7AE9FF.toInt())}
+    private fun smallButtonBackground()=StateListDrawable().apply{
+        addState(intArrayOf(android.R.attr.state_pressed),GradientDrawable().apply{cornerRadius=dp(12).toFloat();setColor(0xFF2B6E91.toInt());setStroke(dp(1),0xFF64D8FF.toInt())})
+        addState(intArrayOf(),GradientDrawable().apply{cornerRadius=dp(12).toFloat();setColor(0xFF16263A.toInt());setStroke(dp(1),0xFF223A54.toInt())})
+    }
 
     private fun smallButton(t: String) = TextView(this).apply {
         text = t
@@ -744,11 +647,9 @@ class MainActivity : Activity() {
         gravity = Gravity.CENTER
         setTextColor(Color.WHITE)
         isAllCaps = false
-        background = GradientDrawable().apply {
-            cornerRadius = dp(12).toFloat()
-            setColor(0xFF16263A.toInt())
-            setStroke(dp(1), 0xFF223A54.toInt())
-        }
+        background = smallButtonBackground()
+        isClickable = true
+        isFocusable = true
     }
 
     private fun lp(w: Int, h: Int) = LinearLayout.LayoutParams(w, h).apply {
