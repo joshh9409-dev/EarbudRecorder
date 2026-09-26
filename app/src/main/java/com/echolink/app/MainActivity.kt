@@ -137,8 +137,18 @@ class MainActivity : Activity() {
         scroll.addView(root)
 
         scroll.setOnApplyWindowInsetsListener { _, insets ->
-            val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
-            root.setPadding(dp(18) + bars.left, dp(20) + bars.top, dp(18) + bars.right, dp(30) + bars.bottom)
+            if (Build.VERSION.SDK_INT >= 30) {
+                val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+                root.setPadding(dp(18) + bars.left, dp(20) + bars.top, dp(18) + bars.right, dp(30) + bars.bottom)
+            } else {
+                @Suppress("DEPRECATION")
+                root.setPadding(
+                    dp(18) + insets.systemWindowInsetLeft,
+                    dp(20) + insets.systemWindowInsetTop,
+                    dp(18) + insets.systemWindowInsetRight,
+                    dp(30) + insets.systemWindowInsetBottom
+                )
+            }
             insets
         }
 
@@ -627,7 +637,7 @@ class MainActivity : Activity() {
 
     private fun humanFileTitle(file: File): String {
         val base = file.name.removePrefix("EchoLink_").removeSuffix(".wav")
-        return if (base.length == 15 && base.contains("_")) {
+        return if ((base.length == 15 || base.length == 19) && base.contains("_")) {
             try {
                 val date = base.substring(0, 8)
                 val time = base.substring(9, 15)
