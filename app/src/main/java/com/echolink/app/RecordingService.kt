@@ -76,7 +76,7 @@ class RecordingService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             START -> {
-                intentSensitivityPercent = intent.getIntExtra(EXTRA_SENSITIVITY, 100).coerceIn(50, 300)
+                intentSensitivityPercent = (intent?.getIntExtra(EXTRA_SENSITIVITY, 100) ?: 100).coerceIn(50, 300)
                 startCapture()
             }
             STOP -> stopCapture()
