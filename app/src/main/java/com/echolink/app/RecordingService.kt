@@ -23,7 +23,6 @@ class RecordingService : Service() {
         const val EXTRA_RECORDING = "recording"
         const val EXTRA_TIMER = "timer"
         const val EXTRA_METER = "meter"
-        const val EXTRA_SENSITIVITY = "sensitivity"
         private const val CHANNEL = "echolink_recording"
         private const val NOTIFICATION_ID = 7
         private const val RATE = 16000
@@ -40,7 +39,6 @@ class RecordingService : Service() {
     private var out: DataOutputStream? = null
     private var dataBytes = 0L
     private var recorderBufferSize = 4096
-    private var sensitivity = 0
     private var bluetoothScoStarted = false
     private var communicationDevice: AudioDeviceInfo? = null
     private var headset: BluetoothHeadset? = null
@@ -74,7 +72,7 @@ class RecordingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            START -> startCapture(intent.getIntExtra(EXTRA_SENSITIVITY, 0))
+            START -> startCapture()
             STOP -> stopCapture()
         }
         return START_NOT_STICKY
@@ -90,7 +88,7 @@ class RecordingService : Service() {
             .build()
     }
 
-    private fun startCapture(level: Int) {
+    private fun startCapture() {
         if (running) return
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             stopSelf()
@@ -98,7 +96,6 @@ class RecordingService : Service() {
         }
 
         // Recording input stays at a clean, fixed gain. Post-save tools handle playback adjustment.
-        sensitivity = 0
         finalized = false
         dataBytes = 0L
 
@@ -341,8 +338,9 @@ class RecordingService : Service() {
         running = false
         handler.removeCallbacks(retry)
         releaseRecorder()
-        // The capture thread owns finalization. This prevents the WAV header from being
-        // overwritten by a second concurrent finalization pass.
+        worker?.interrupt()
+        // The capture thread owns finalization. Releasing AudioRecord plus interrupting
+        // the worker makes STOP responsive while keeping one finalization owner.
     }
 
     private fun cleanupRouting() {
@@ -427,18 +425,6 @@ class RecordingService : Service() {
         )
     }
 
-    private fun applyGain(buffer: ByteArray, n: Int, gain: Float) {
-        var i = 0
-        while (i + 1 < n) {
-            val raw = (buffer[i].toInt() and 255) or (buffer[i + 1].toInt() shl 8)
-            val signed = if (raw and 0x8000 != 0) raw - 65536 else raw
-            val value = (signed * gain).toInt().coerceIn(-32768, 32767)
-            buffer[i] = (value and 255).toByte()
-            buffer[i + 1] = (value shr 8).toByte()
-            i += 2
-        }
-    }
-
     private fun peak(buffer: ByteArray, n: Int): Int {
         var p = 0
         var i = 0
@@ -471,6 +457,9 @@ class RecordingService : Service() {
         running = false
         handler.removeCallbacks(retry)
         releaseRecorder()
+        worker?.interrupt()
+        worker = null
+        cleanupRouting()
         super.onDestroy()
     }
 
