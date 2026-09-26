@@ -16,6 +16,7 @@ import android.graphics.drawable.StateListDrawable
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.MimeTypes
 import androidx.media3.exoplayer.ExoPlayer
 import java.io.File
 import java.io.RandomAccessFile
@@ -424,7 +425,11 @@ class MainActivity : Activity() {
 
             exo.setPlaybackSpeed(rate)
             exo.volume=1f
-            exo.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(source)))
+            val mediaItem = MediaItem.Builder()
+                .setUri(android.net.Uri.fromFile(source))
+                .setMimeType(MimeTypes.AUDIO_WAV)
+                .build()
+            exo.setMediaItem(mediaItem)
             exo.prepare()
             exo.playWhenReady = true
 
