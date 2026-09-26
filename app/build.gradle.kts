@@ -3,9 +3,6 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-dependencies {
-    implementation("androidx.media3:media3-exoplayer:1.9.4")
-}
 
 android {
     namespace = "com.echolink.app"
