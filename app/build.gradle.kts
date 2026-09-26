@@ -4,7 +4,7 @@ plugins {
 }
 
 dependencies {
-    implementation("androidx.media3:media3-exoplayer:1.10.1")
+    implementation("androidx.media3:media3-exoplayer:1.9.4")
 }
 
 android {
