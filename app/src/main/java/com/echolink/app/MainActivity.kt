@@ -87,9 +87,8 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = Color.TRANSPARENT
-        window.navigationBarColor = Color.TRANSPARENT
-        window.decorView.systemUiVisibility = 0
+        window.statusBarColor = Color.rgb(5, 8, 16)
+        window.navigationBarColor = Color.rgb(5, 8, 16)
         buildUi()
         getSystemService(AudioManager::class.java).registerAudioDeviceCallback(audioDeviceCallback, handler)
         requestPermissionsIfNeeded()
