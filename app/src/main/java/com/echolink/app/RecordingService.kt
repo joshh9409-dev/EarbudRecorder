@@ -397,14 +397,18 @@ class RecordingService : Service() {
             out = null
 
             if (file != null && file.exists() && file.length() >= 44L) {
-                try {
-                    RandomAccessFile(file, "rw").use { r ->
-                        r.seek(4)
-                        r.writeInt(Integer.reverseBytes((36L + bytes).coerceAtMost(0x7FFFFFFFL).toInt()))
-                        r.seek(40)
-                        r.writeInt(Integer.reverseBytes(bytes.coerceAtMost(0x7FFFFFFFL).toInt()))
-                    }
-                } catch (_: Exception) {}
+                if (bytes > 0L) {
+                    try {
+                        RandomAccessFile(file, "rw").use { r ->
+                            r.seek(4)
+                            r.writeInt(Integer.reverseBytes((36L + bytes).coerceAtMost(0x7FFFFFFFL).toInt()))
+                            r.seek(40)
+                            r.writeInt(Integer.reverseBytes(bytes.coerceAtMost(0x7FFFFFFFL).toInt()))
+                        }
+                    } catch (_: Exception) {}
+                } else {
+                    try { file.delete() } catch (_: Exception) {}
+                }
             }
 
             dataBytes = 0L
