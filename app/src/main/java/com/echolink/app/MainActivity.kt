@@ -173,7 +173,7 @@ class MainActivity : Activity() {
             "RECORD AUDIO    ${if(mic) "GRANTED" else "NEEDED"}\n" +
             "STORAGE         $freeText FREE\n" +
             "ROUTING         ${if(input!=null) "BLUETOOTH INPUT" else "WAITING FOR EARBUD"}\n" +
-            "READY           ${if(enabled && mic && input!=null) "EARBUD MICROPHONE READY" else "CONNECT EARBUD WITH MIC"}
+            "READY           ${if(enabled && mic && input!=null) "EARBUD MICROPHONE READY" else "CONNECT EARBUD WITH MIC"}"
         recordButton.isEnabled = recording || (enabled && mic && input != null)
         recordButton.alpha = if(recordButton.isEnabled) 1f else .45f
     }
