@@ -22,7 +22,6 @@ import kotlin.math.max
 
 class MainActivity : Activity() {
     private lateinit var statusContainer: LinearLayout
-    private lateinit var recordButton: TextView
     private lateinit var timerText: TextView
     private lateinit var timerCaption: TextView
     private lateinit var liveWave: LiveWaveformView
@@ -193,8 +192,8 @@ class MainActivity : Activity() {
             }
         }
         nav.addView(navItem("▰", "Library") { showLibraryScreen() }, LinearLayout.LayoutParams(0, dp(76), 1f))
-        nav.addView(navItem("⚙", "Settings") { Toast.makeText(this, "Settings", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(0, dp(76), 1f))
-        nav.addView(navItem("◖))", "Volume") { Toast.makeText(this, "Playback volume is controlled by Android.", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(0, dp(76), 1f))
+        nav.addView(navItem("⚙", "Settings") { showSettingsScreen() }, LinearLayout.LayoutParams(0, dp(76), 1f))
+        nav.addView(navItem("◖))", "Volume") { showVolumeScreen() }, LinearLayout.LayoutParams(0, dp(76), 1f))
         root.addView(nav, LinearLayout.LayoutParams(-1, dp(86)))
 
         savedRecordingsButton = TextView(this).apply { visibility = View.GONE }
@@ -268,7 +267,7 @@ class MainActivity : Activity() {
                 recordOrb.connectionReady = true
             }
             if (pulse == null) {
-                pulse = ObjectAnimator.ofFloat(recordButton, View.ALPHA, 1f, .72f, 1f).apply {
+                pulse = ObjectAnimator.ofFloat(recordOrb, View.ALPHA, 1f, .78f, 1f).apply {
                     duration = 1100
                     repeatCount = ObjectAnimator.INFINITE
                     start()
@@ -284,42 +283,187 @@ class MainActivity : Activity() {
     }
 
     private fun showLibraryScreen() {
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(18), dp(18), dp(18))
-            setBackgroundColor(Color.rgb(5, 8, 16))
+        val root = pageRoot()
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
         }
+        header.addView(smallButton("‹").apply {
+            textSize = 22f
+            setOnClickListener { buildUi() }
+        }, LinearLayout.LayoutParams(dp(48), dp(48)))
+        header.addView(label("LIBRARY", 22f, Color.WHITE).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            typeface = Typeface.DEFAULT_BOLD
+        }, LinearLayout.LayoutParams(0, dp(48), 1f))
+        root.addView(header)
+        root.addView(label("Saved recordings • newest first", 11.5f, 0xFF8D7CA0.toInt()), lp(-1, 28))
 
-        val back = smallButton("‹  BACK TO RECORDER").apply {
+        val search = EditText(this).apply {
+            hint = "Search recordings"
+            setHintTextColor(0xFF756A82.toInt())
+            setTextColor(Color.WHITE)
             textSize = 12f
-            setOnClickListener {
-                buildUi()
-                refreshStatus()
-                refreshLibrary()
+            singleLine = true
+            setPadding(dp(14), 0, dp(14), 0)
+            background = GradientDrawable().apply {
+                cornerRadius = dp(14).toFloat()
+                setColor(0xFF15131C.toInt())
+                setStroke(dp(1), 0xFF30283C.toInt())
             }
         }
-        root.addView(back, lp(-1, 52))
-        root.addView(label("SAVED RECORDINGS", 22f, Color.WHITE).apply {
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(2, dp(10), 2, dp(4))
-        }, lp(-1, -2))
-        root.addView(label("Your recordings are stored on this phone until you delete them.", 12f, 0xFF7D91A5.toInt()), lp(-1, -2))
+        root.addView(search, lp(-1, 46))
 
         val scroll = ScrollView(this).apply {
             overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
             clipToPadding = false
+            setPadding(0, dp(2), 0, dp(6))
         }
         libraryContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         scroll.addView(libraryContainer, LinearLayout.LayoutParams(-1, -2))
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        addBottomNav(root, 0)
         setContentView(root)
         refreshLibrary()
+
+        search.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                refreshLibrary(s?.toString().orEmpty())
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
     }
 
-    private fun refreshLibrary() {
+    private fun showSettingsScreen() {
+        val root = pageRoot()
+        root.addView(pageTitle("SETTINGS", "Device connection and recording information"))
+        val card = panel()
+        val input = findBluetoothInput()
+        addInfoRow(card, "Device connection", if (input != null) friendlyDeviceName(input) else "Not connected")
+        addInfoRow(card, "Microphone route", if (input != null) "Bluetooth microphone only" else "Waiting for earbuds")
+        addInfoRow(card, "Recording format", "16-bit / 16 kHz PCM WAV")
+        addInfoRow(card, "Storage", formatFreeSpace(recordingsDir().parentFile?.usableSpace ?: filesDir.usableSpace) + " free")
+        addInfoRow(card, "Save location", "Internal app storage")
+        addInfoRow(card, "System recording indicator", "Enabled")
+        root.addView(card, lp(-1, -2))
+        root.addView(label(
+            "EchoLink does not play captured audio live. If the Bluetooth microphone disappears while recording, the app waits for it and resumes when it becomes available.",
+            11f, 0xFF81768E.toInt()
+        ).apply { setPadding(dp(4), dp(10), dp(4), dp(8)) }, lp(-1, -2))
+        addBottomNav(root, 1)
+        setContentView(root)
+    }
+
+    private fun showVolumeScreen() {
+        val root = pageRoot()
+        root.addView(pageTitle("VOLUME CONTROL", "Playback volume for saved recordings"))
+        val card = panel().apply { gravity = Gravity.CENTER_HORIZONTAL }
+        val audio = getSystemService(AudioManager::class.java)
+        val maxVolume = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+        val current = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+        val value = label((current * 100 / maxVolume).toString() + "%", 40f, Color.WHITE).apply {
+            gravity = Gravity.CENTER
+            typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+        }
+        card.addView(label("PLAYBACK VOLUME", 12f, 0xFFA985C8.toInt()).apply {
+            gravity = Gravity.CENTER
+        }, lp(-1, -2))
+        card.addView(value, lp(-1, 68))
+        val seek = SeekBar(this).apply {
+            max = maxVolume
+            progress = current
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar?, progress: Int, fromUser: Boolean) {
+                    if (fromUser) {
+                        audio.setStreamVolume(AudioManager.STREAM_MUSIC, progress, 0)
+                        value.text = (progress * 100 / maxVolume).toString() + "%"
+                    }
+                }
+                override fun onStartTrackingTouch(s: SeekBar?) {}
+                override fun onStopTrackingTouch(s: SeekBar?) {}
+            })
+        }
+        card.addView(seek, lp(-1, 54))
+        card.addView(label("MIC MONITORING", 12f, 0xFFA985C8.toInt()).apply {
+            setPadding(dp(4), dp(14), dp(4), dp(2))
+        }, lp(-1, -2))
+        card.addView(label(
+            "OFF • EchoLink never plays captured audio live while recording.",
+            11f, 0xFF81768E.toInt()
+        ), lp(-1, -2))
+        root.addView(card, lp(-1, -2))
+        addBottomNav(root, 2)
+        setContentView(root)
+    }
+
+    private fun pageRoot() = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(14), dp(12), dp(14), 0)
+        setBackgroundColor(0xFF05060C.toInt())
+    }
+
+    private fun pageTitle(title: String, subtitle: String): LinearLayout {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(label("ECHOLINK", 27f, 0xFFE7E5EE.toInt()).apply {
+                gravity = Gravity.CENTER
+                letterSpacing = 0.03f
+            }, lp(-1, 40))
+            addView(label(title, 12f, 0xFFA985C8.toInt()).apply {
+                gravity = Gravity.CENTER
+                letterSpacing = 0.08f
+            }, lp(-1, 26))
+            addView(label(subtitle, 10.5f, 0xFF756B82.toInt()).apply {
+                gravity = Gravity.CENTER
+            }, lp(-1, 26))
+        }
+    }
+
+    private fun addInfoRow(card: LinearLayout, title: String, value: String) {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(4), 0, dp(4), 0)
+        }
+        row.addView(label(title, 12f, Color.WHITE), LinearLayout.LayoutParams(0, dp(44), 1f))
+        row.addView(label(value, 11f, 0xFFA98DC0.toInt()).apply {
+            gravity = Gravity.END
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }, LinearLayout.LayoutParams(0, dp(44), 1f))
+        card.addView(row, lp(-1, 46))
+    }
+
+    private fun addBottomNav(root: LinearLayout, selected: Int) {
+        val nav = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(dp(4), dp(4), dp(4), dp(8))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(18).toFloat()
+                setColor(0xFF171321.toInt())
+                setStroke(dp(1), 0xFF2C253A.toInt())
+            }
+        }
+        val items = listOf(
+            Triple("▰", "Library") { showLibraryScreen() },
+            Triple("⚙", "Settings") { showSettingsScreen() },
+            Triple("◖))", "Volume") { showVolumeScreen() }
+        )
+        items.forEachIndexed { index, item ->
+            val b = navItem(item.first, item.second, item.third)
+            b.alpha = if (index == selected) 1f else .62f
+            nav.addView(b, LinearLayout.LayoutParams(0, dp(76), 1f))
+        }
+        root.addView(nav, LinearLayout.LayoutParams(-1, dp(86)))
+    }
+
+    private fun refreshLibrary(query: String = "") {
         val files = recordingsDir().listFiles { f -> f.extension.equals("wav", true) }
             ?.sortedByDescending { it.lastModified() }
             .orEmpty()
+            .filter { query.isBlank() || humanFileTitle(it).contains(query, true) || it.name.contains(query, true) }
 
         if (::savedRecordingsButton.isInitialized) {
             savedRecordingsButton.visibility = if (files.isEmpty()) View.GONE else View.VISIBLE
@@ -970,10 +1114,6 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun recordButtonBackground(active:Boolean)=GradientDrawable(
-        GradientDrawable.Orientation.TOP_BOTTOM,
-        if(active)intArrayOf(0xFFE14D70.toInt(),0xFF76182F.toInt()) else intArrayOf(0xFF29C3F4.toInt(),0xFF1056A4.toInt())
-    ).apply{shape=GradientDrawable.OVAL;setStroke(dp(2),0xFF7AE9FF.toInt())}
     private fun smallButtonBackground()=StateListDrawable().apply{
         addState(intArrayOf(android.R.attr.state_pressed),GradientDrawable().apply{cornerRadius=dp(12).toFloat();setColor(0xFF2B6E91.toInt());setStroke(dp(1),0xFF64D8FF.toInt())})
         addState(intArrayOf(),GradientDrawable().apply{cornerRadius=dp(12).toFloat();setColor(0xFF16263A.toInt());setStroke(dp(1),0xFF223A54.toInt())})
@@ -1027,6 +1167,16 @@ class MainActivity : Activity() {
         }
 
         init { post(tick) }
+
+        override fun onAttachedToWindow() {
+            super.onAttachedToWindow()
+            post(tick)
+        }
+
+        override fun onDetachedFromWindow() {
+            removeCallbacks(tick)
+            super.onDetachedFromWindow()
+        }
 
         override fun onDraw(canvas: Canvas) {
             val cx = width / 2f
