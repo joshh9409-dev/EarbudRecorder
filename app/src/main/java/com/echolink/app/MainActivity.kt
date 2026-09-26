@@ -41,6 +41,7 @@ class MainActivity : Activity() {
     private var exportFile: File? = null
     private var currentScreen = "home"
     private var playbackBoostPercent = 100
+    private var micSensitivityPercent = 100
     private var backCallback: OnBackInvokedCallback? = null
     private val processorExecutor = Executors.newSingleThreadExecutor()
 
@@ -92,6 +93,9 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val prefs = getSharedPreferences("echolink_settings", MODE_PRIVATE)
+        playbackBoostPercent = prefs.getInt("playback_boost", 100).coerceIn(100, 400)
+        micSensitivityPercent = prefs.getInt("mic_sensitivity", 100).coerceIn(50, 300)
         if (Build.VERSION.SDK_INT >= 33) {
             backCallback = OnBackInvokedCallback {
                 when (currentScreen) {
@@ -291,6 +295,7 @@ class MainActivity : Activity() {
             }
             val i = Intent(this, RecordingService::class.java)
                 .setAction(RecordingService.START)
+                .putExtra(RecordingService.EXTRA_SENSITIVITY, micSensitivityPercent)
             if (Build.VERSION.SDK_INT >= 26) startForegroundService(i) else startService(i)
         } else {
             startService(Intent(this, RecordingService::class.java).setAction(RecordingService.STOP))
@@ -383,7 +388,7 @@ class MainActivity : Activity() {
     private fun showVolumeScreen() {
         currentScreen = "volume"
         val root = pageRoot()
-        root.addView(pageTitle("VOLUME BOOST", "Make saved recordings louder"))
+        root.addView(pageTitle("AUDIO SETTINGS", "Control recording sensitivity and playback loudness"))
 
         val card = panel().apply { gravity = Gravity.CENTER_HORIZONTAL }
         val value = label(playbackBoostPercent.toString() + "%", 40f, Color.WHITE).apply {
@@ -404,6 +409,7 @@ class MainActivity : Activity() {
                 override fun onProgressChanged(s: SeekBar?, progress: Int, fromUser: Boolean) {
                     if (fromUser) {
                         playbackBoostPercent = progress.coerceIn(100, 400)
+                        getSharedPreferences("echolink_settings", MODE_PRIVATE).edit().putInt("playback_boost", playbackBoostPercent).apply()
                         value.text = playbackBoostPercent.toString() + "%"
                     }
                 }
@@ -419,6 +425,42 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             setPadding(dp(4), dp(8), dp(4), dp(8))
         }, lp(-1, -2))
+        
+        val sensitivityCard = panel().apply { gravity = Gravity.CENTER_HORIZONTAL }
+        val sensitivityValue = label(micSensitivityPercent.toString() + "%", 40f, Color.WHITE).apply {
+            gravity = Gravity.CENTER
+            typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+        }
+        sensitivityCard.addView(label("MIC SENSITIVITY", 12f, 0xFFA985C8.toInt()).apply {
+            gravity = Gravity.CENTER
+        }, lp(-1, -2))
+        sensitivityCard.addView(sensitivityValue, lp(-1, 68))
+
+        val sensitivitySeek = SeekBar(this).apply {
+            min = 50
+            max = 300
+            progress = micSensitivityPercent
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar?, progress: Int, fromUser: Boolean) {
+                    if (fromUser) {
+                        micSensitivityPercent = progress.coerceIn(50, 300)
+                        getSharedPreferences("echolink_settings", MODE_PRIVATE).edit()
+                            .putInt("mic_sensitivity", micSensitivityPercent).apply()
+                        sensitivityValue.text = micSensitivityPercent.toString() + "%"
+                    }
+                }
+                override fun onStartTrackingTouch(s: SeekBar?) {}
+                override fun onStopTrackingTouch(s: SeekBar?) {}
+            })
+        }
+        sensitivityCard.addView(sensitivitySeek, lp(-1, 54))
+        sensitivityCard.addView(label(
+            "100% = normal earbud mic input.\n50% reduces input level. 300% boosts quiet sounds most strongly.\nThis changes the recorded signal level, not the Bluetooth connection range.",
+            11f, 0xFF81768E.toInt()
+        ).apply {
+            gravity = Gravity.CENTER
+            setPadding(dp(4), dp(8), dp(4), dp(8))
+        }, lp(-1, -2))
 
         val scroll = ScrollView(this).apply {
             clipToPadding = false
@@ -426,6 +468,7 @@ class MainActivity : Activity() {
         }
         val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         content.addView(card, lp(-1, -2))
+        content.addView(sensitivityCard, lp(-1, -2))
         scroll.addView(content, LinearLayout.LayoutParams(-1, -2))
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         addBottomNav(root, 1)
