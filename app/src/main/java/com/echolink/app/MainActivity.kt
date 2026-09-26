@@ -505,7 +505,7 @@ class MainActivity : Activity() {
                 onProgress = { ms ->
                     runOnUiThread {
                         if (activeFile == file) {
-                            val total = pcm.durationMillis()
+                            val total = durationMillis(file)
                             seek.max = total.coerceAtLeast(1L).toInt()
                             seek.progress = ms.coerceIn(0L, total).toInt()
                             position.text = formatMillis(ms) + " / " + formatMillis(total)
@@ -516,7 +516,7 @@ class MainActivity : Activity() {
                     runOnUiThread {
                         if (activeFile == file) {
                             seek.progress = seek.max
-                            position.text = formatMillis(pcm.durationMillis()) + " / " + formatMillis(pcm.durationMillis())
+                            position.text = formatMillis(durationMillis(file)) + " / " + formatMillis(durationMillis(file))
                             releasePlayer()
                         }
                     }
