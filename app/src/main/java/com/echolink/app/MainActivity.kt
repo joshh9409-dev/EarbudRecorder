@@ -274,11 +274,7 @@ class MainActivity : Activity() {
         }
 
         val status = findViewById<View>(android.R.id.content).findViewWithTag<TextView>("main_status")
-        status?.text = if (connected) {
-            "CONNECTED: " + friendlyDeviceName(input!!) + " • STABLE LINK"
-        } else {
-            "NOT CONNECTED • CONNECT BLUETOOTH EARBUD MICROPHONE"
-        }
+        status?.text = if (connected) "CONNECTED" else "NOT CONNECTED"
     }
 
     private fun toggleRecording() {
