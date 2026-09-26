@@ -788,7 +788,6 @@ class MainActivity : Activity() {
 
         fun seekTo(ms: Long) {
             pendingSeekMs = ms.coerceIn(0L, totalDuration)
-            try { track?.pause(); track?.flush(); track?.play() } catch (_: Exception) {}
         }
 
         fun start() {
