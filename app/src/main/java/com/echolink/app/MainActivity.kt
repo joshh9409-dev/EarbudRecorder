@@ -727,66 +727,67 @@ class MainActivity : Activity() {
         val target = File(dir, source.nameWithoutExtension + "_boost_" + key + ".wav")
 
         /*
-         * Do not simply multiply every sample by the boost amount.
-         * That makes normal speech hit 0 dBFS and hard-clip, which sounds
-         * harsh and "screaming". Instead use a gentler pre-gain followed by
-         * a speech-friendly compressor and a soft ceiling.
+         * Playback-only clean gain.
          *
-         * 100% is bit-for-bit equivalent to the original recording because
-         * this function is only called for values above 100%.
+         * The previous version used compression and a nonlinear soft ceiling.
+         * That processing could reshape speech transients and make Bluetooth
+         * speech sound like a harsh/jumbled screech. This version keeps the
+         * waveform linear: quiet samples are amplified by a controlled gain,
+         * while a simple look-ahead peak gain prevents samples from exceeding
+         * the PCM ceiling. The original recording is never changed.
          */
-        val preGain = 1f + (safeBoost - 1f) * 0.75f
-        val threshold = 0.34f
-        val ratio = 5.0f
-        val ceiling = 0.90f
+        val gain = 1f + (safeBoost - 1f) * 0.55f
 
         RandomAccessFile(source, "r").use { input ->
             val payload = (input.length() - 44L).coerceAtLeast(0L)
             RandomAccessFile(target, "rw").use { out ->
                 out.setLength(0)
                 writeWavHeader(out, payload)
+
                 input.seek(44L)
-                val buffer = ByteArray(8192)
-                var remaining = payload
-
-                while (remaining > 0L) {
-                    val n = input.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
+                val sourceData = ByteArray(payload.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+                var offset = 0
+                while (offset < sourceData.size) {
+                    val n = input.read(sourceData, offset, sourceData.size - offset)
                     if (n <= 0) break
-
-                    var i = 0
-                    while (i + 1 < n) {
-                        val raw = (buffer[i].toInt() and 0xFF) or (buffer[i + 1].toInt() shl 8)
-                        val sample = if ((raw and 0x8000) != 0) raw - 65536 else raw
-                        val inputSample = sample / 32768f
-                        val sign = if (inputSample < 0f) -1f else 1f
-                        var magnitude = kotlin.math.abs(inputSample) * preGain
-
-                        // Smooth static compression keeps louder speech from
-                        // slamming into the digital ceiling after boosting.
-                        if (magnitude > threshold) {
-                            magnitude = threshold + (magnitude - threshold) / ratio
-                        }
-
-                        // Soft ceiling instead of hard clipping. This avoids
-                        // the brittle, distorted sound caused by simple clamping.
-                        if (magnitude > ceiling) {
-                            val excess = (magnitude - ceiling) / (1f - ceiling)
-                            magnitude = ceiling + (1f - ceiling) *
-                                (1f - 1f / (1f + excess))
-                        }
-
-                        val output = (sign * magnitude)
-                            .coerceIn(-ceiling, ceiling)
-                        val boosted = (output * 32767f).toInt()
-
-                        buffer[i] = (boosted and 0xFF).toByte()
-                        buffer[i + 1] = (boosted shr 8).toByte()
-                        i += 2
-                    }
-
-                    out.write(buffer, 0, n)
-                    remaining -= n.toLong()
+                    offset += n
                 }
+
+                // Find the absolute peak first so the entire waveform can be
+                // scaled uniformly. This preserves the shape of speech.
+                var peak = 1
+                var i = 0
+                while (i + 1 < offset) {
+                    val raw = (sourceData[i].toInt() and 0xFF) or
+                        (sourceData[i + 1].toInt() shl 8)
+                    val sample = if ((raw and 0x8000) != 0) raw - 65536 else raw
+                    peak = max(peak, abs(sample))
+                    i += 2
+                }
+
+                val safePeak = peak.toFloat()
+                val requestedPeak = safePeak * gain
+                val scale = if (requestedPeak > 30000f) {
+                    30000f / safePeak
+                } else {
+                    gain
+                }
+
+                i = 0
+                while (i + 1 < offset) {
+                    val raw = (sourceData[i].toInt() and 0xFF) or
+                        (sourceData[i + 1].toInt() shl 8)
+                    val sample = if ((raw and 0x8000) != 0) raw - 65536 else raw
+                    val boosted = (sample * scale)
+                        .coerceIn(-32768f, 32767f)
+                        .toInt()
+
+                    sourceData[i] = (boosted and 0xFF).toByte()
+                    sourceData[i + 1] = (boosted shr 8).toByte()
+                    i += 2
+                }
+
+                out.write(sourceData, 0, offset)
             }
         }
         return target
