@@ -339,75 +339,88 @@ class MainActivity : Activity() {
         listOf(play, back, fwd, speed).forEach { row1.addView(it, rowButtonLp()) }
         card.addView(row1, controlRowLp())
 
-        val row2 = LinearLayout(this).apply {
+        val adjustments = panel().apply {
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+        }
+        adjustments.addView(label("AUDIO ADJUSTMENTS", 12f, 0xFFB58CFF.toInt()).apply {
+            letterSpacing = 0.08f
+        }, lp(-1, -2))
+
+        val eq = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        listOf("Bass", "Mid", "Treble", "Presence", "Brilliance").forEach { name ->
+            val col = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+            }
+            col.addView(label(name, 9.5f, 0xFFD6D6E2.toInt()).apply {
+                gravity = Gravity.CENTER
+            }, lp(-1, -2))
+            val seek = SeekBar(this).apply {
+                max = 200
+                progress = 100
+                rotation = -90f
+                splitTrack = false
+            }
+            col.addView(seek, LinearLayout.LayoutParams(dp(54), dp(92)))
+            eq.addView(col, LinearLayout.LayoutParams(0, dp(118), 1f))
+        }
+        adjustments.addView(eq, lp(-1, dp(124)))
+
+        fun switchRow(title: String, enabled: Boolean, onChange: (Boolean) -> Unit) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(4), dp(2), dp(4), dp(2))
+            }
+            row.addView(label(title, 12f, Color.WHITE), LinearLayout.LayoutParams(0, dp(44), 1f))
+            val sw = Switch(this).apply {
+                isChecked = enabled
+                buttonDrawable = null
+                setOnCheckedChangeListener { _, checked -> onChange(checked) }
+            }
+            row.addView(sw, LinearLayout.LayoutParams(dp(58), dp(44)))
+            adjustments.addView(row, lp(-1, dp(46)))
+        }
+
+        switchRow("Auto-Gain Control (AGC)", false) { }
+        switchRow("Voice Isolation", false) { }
+
+        val noiseRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            clipChildren = false
-            clipToPadding = false
         }
-        val normal=smallButton("NORMAL")
-        val boost=smallButton("BOOST")
-        val clear=smallButton("CLEAR")
-        val export=smallButton("EXPORT")
-        val del=smallButton("DELETE")
-        listOf(normal,boost,clear,export,del).forEach{row2.addView(it,rowButtonLp())}
-        card.addView(row2, controlRowLp())
+        noiseRow.addView(label("Noise Reduction", 12f, Color.WHITE), LinearLayout.LayoutParams(0, dp(64), 1f))
+        val noise = SeekBar(this).apply {
+            max = 100
+            progress = 40
+        }
+        noiseRow.addView(noise, LinearLayout.LayoutParams(dp(150), dp(54)))
+        adjustments.addView(noiseRow, lp(-1, dp(66)))
 
-        var rate = 1f
-        var playbackMode = PlaybackMode.NORMAL
+        val playbackRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        playbackRow.addView(label("Playback Speed", 12f, Color.WHITE), LinearLayout.LayoutParams(0, dp(48), 1f))
+        val speedAdjust = smallButton("1×").apply { minHeight = dp(40) }
+        playbackRow.addView(speedAdjust, LinearLayout.LayoutParams(dp(72), dp(42)))
+        val exportLabel = label("Export as...", 11f, 0xFFD6D6E2.toInt()).apply {
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        playbackRow.addView(exportLabel, LinearLayout.LayoutParams(dp(82), dp(42)))
+        listOf("MP3", "WAV", "AAC").forEach { format ->
+            val b = smallButton(format).apply { minHeight = dp(40) }
+            playbackRow.addView(b, LinearLayout.LayoutParams(dp(58), dp(42)).apply {
+                setMargins(dp(2), 0, dp(2), 0)
+            })
+        }
+        adjustments.addView(playbackRow, lp(-1, dp(50)))
 
-        seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(s: SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser && activeFile == file && player != null) {
-                    player?.seekTo(progress.coerceAtLeast(0))
-                }
-                if (fromUser && activeFile != file) position.text = formatMillis(progress.toLong()) + " / " + duration(file)
-            }
-            override fun onStartTrackingTouch(s: SeekBar?) {}
-            override fun onStopTrackingTouch(s: SeekBar?) {}
-        })
+        card.addView(adjustments, lp(-1, -2))
 
-        play.setOnClickListener {
-            if (activeFile == file && player != null) {
-                releasePlayer()
-                return@setOnClickListener
-            }
-            startPlayback(file, play, seek, position, rate, playbackMode)
-        }
-
-        back.setOnClickListener {
-            if (activeFile == file) {
-                val p = player
-                if (p != null) p.seekTo((p.currentPosition - 10000).coerceAtLeast(0))
-            }
-        }
-        fwd.setOnClickListener {
-            if (activeFile == file) {
-                val p = player
-                if (p != null) p.seekTo((p.currentPosition + 10000).coerceAtMost(p.duration.coerceAtLeast(0)))
-            }
-        }
-        speed.setOnClickListener {
-            rate = when (rate) {
-                1f -> 1.25f
-                1.25f -> 1.5f
-                1.5f -> 2f
-                else -> 1f
-            }
-            speed.text = String.format(Locale.UK, "%.2g×", rate)
-            if (activeFile == file) {
-                try {
-                    player?.setPlaybackParams(
-                        PlaybackParams()
-                            .setSpeed(rate.coerceIn(0.5f, 2f))
-                            .setPitch(1f)
-                    )
-                } catch (_: Exception) {}
-            }
-        }
-        normal.setOnClickListener { playbackMode=PlaybackMode.NORMAL; boost.text="BOOST"; clear.text="CLEAR"; if(activeFile==file) restartProcessedPlayback(file,play,seek,position,rate,playbackMode) }
-        boost.setOnClickListener { playbackMode=PlaybackMode.BOOST; boost.text="BOOST ✓"; clear.text="CLEAR"; if(activeFile==file) restartProcessedPlayback(file,play,seek,position,rate,playbackMode) else startPlayback(file,play,seek,position,rate,playbackMode) }
-        clear.setOnClickListener { playbackMode=PlaybackMode.CLEAR; clear.text="CLEAR ✓"; boost.text="BOOST"; if(activeFile==file) restartProcessedPlayback(file,play,seek,position,rate,playbackMode) else startPlayback(file,play,seek,position,rate,playbackMode) }
         export.setOnClickListener {
             exportFile = file
             val i = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
