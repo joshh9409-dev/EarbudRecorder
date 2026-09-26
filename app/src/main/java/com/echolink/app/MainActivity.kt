@@ -26,6 +26,7 @@ class MainActivity : Activity() {
     private lateinit var timerText: TextView
     private lateinit var timerCaption: TextView
     private lateinit var liveWave: LiveWaveformView
+    private lateinit var recordOrb: RecordOrbView
     private lateinit var savedRecordingsButton: TextView
     private lateinit var libraryContainer: LinearLayout
 
@@ -67,6 +68,7 @@ class MainActivity : Activity() {
             timerText.text = intent.getStringExtra(RecordingService.EXTRA_TIMER) ?: "00:00"
             val inputLevel = intent.getIntExtra(RecordingService.EXTRA_METER, 0)
             liveWave.setLevel(inputLevel / 100f)
+            if (::recordOrb.isInitialized) recordOrb.level = inputLevel / 100f
             updateRecordingUi()
             if (!recording) {
                 refreshStatus()
@@ -125,78 +127,116 @@ class MainActivity : Activity() {
     private fun buildUi() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(18), dp(18), dp(18))
-            setBackgroundColor(Color.rgb(5, 8, 16))
+            setPadding(dp(14), dp(12), dp(14), 0)
+            setBackgroundColor(0xFF05060C.toInt())
         }
-        root.addView(label("ECHOLINK", 28f, Color.WHITE).apply { gravity=Gravity.CENTER; typeface=Typeface.DEFAULT_BOLD }, lp(-1,-2))
-        root.addView(label("BLUETOOTH EAR BUD RECORDER",11f,0xFF82A1B8.toInt()).apply {
-            gravity=Gravity.CENTER; letterSpacing=0.12f; setPadding(0,0,0,dp(8))
-        },lp(-1,-2))
 
-        val statusPanel=panel().apply { setPadding(dp(12),dp(8),dp(12),dp(8)) }
-        statusContainer=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
-        statusPanel.addView(statusContainer,lp(-1,-2))
-        root.addView(statusPanel,lp(-1,-2))
+        root.addView(label("ECHOLINK", 29f, 0xFFE7E5EE.toInt()).apply {
+            gravity = Gravity.CENTER
+            letterSpacing = 0.03f
+        }, lp(-1, 44))
 
-        timerCaption=label("READY",11f,0xFF7890A5.toInt()).apply { gravity=Gravity.CENTER; letterSpacing=0.16f }
-        root.addView(timerCaption,lp(-1,-2))
-        timerText=label("00:00",30f,Color.WHITE).apply { gravity=Gravity.CENTER; typeface=Typeface.MONOSPACE }
-        root.addView(timerText,lp(-1,-2))
+        root.addView(label("BLUETOOTH EAR BUD RECORDER", 11f, 0xFFA985C8.toInt()).apply {
+            gravity = Gravity.CENTER
+            letterSpacing = 0.08f
+        }, lp(-1, 24))
 
-        recordButton=TextView(this).apply {
-            text="MIC\nREC"; textSize=17f; gravity=Gravity.CENTER; typeface=Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE); background=recordButtonBackground(false)
-            setCompoundDrawablesWithIntrinsicBounds(0,android.R.drawable.ic_btn_speak_now,0,0)
-            compoundDrawablePadding=dp(4); isClickable=true; isFocusable=true
+        val status = TextView(this).apply {
+            tag = "main_status"
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setTextColor(0xFFBCA6D2.toInt())
+            setPadding(dp(14), 0, dp(14), 0)
+            background = GradientDrawable().apply {
+                cornerRadius = dp(16).toFloat()
+                setColor(0xFF20182F.toInt())
+                setStroke(dp(1), 0xFF3A2851.toInt())
+            }
+            isSingleLine = true
+        }
+        root.addView(status, lp(-1, 42))
+
+        liveWave = LiveWaveformView(this)
+        root.addView(liveWave, lp(-1, 118))
+
+        timerText = label("00:00", 52f, Color.WHITE).apply {
+            gravity = Gravity.CENTER
+            typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+            includeFontPadding = false
+        }
+        root.addView(timerText, lp(-1, 62))
+
+        recordOrb = RecordOrbView(this).apply {
+            isClickable = true
             setOnClickListener { toggleRecording() }
         }
-        root.addView(recordButton,LinearLayout.LayoutParams(dp(164),dp(164)).apply {
-            gravity=Gravity.CENTER_HORIZONTAL; setMargins(0,dp(6),0,dp(10))
-        })
+        root.addView(recordOrb, LinearLayout.LayoutParams(-1, dp(210)))
 
-        root.addView(label("LIVE MICROPHONE WAVEFORM",11f,0xFF7890A5.toInt()).apply {
-            setPadding(dp(4),dp(2),dp(4),dp(4)); letterSpacing=0.12f
-        },lp(-1,-2))
-        liveWave=LiveWaveformView(this)
-        root.addView(liveWave,lp(-1,64))
-        root.addView(label("No captured audio is played live.",11f,0xFF71849A.toInt()).apply {
-            setPadding(dp(4),0,dp(4),dp(4))
-        },lp(-1,-2))
-
-        val behaviour=panel()
-        behaviour.addView(label("RECORDING",11f,0xFF78A8C4.toInt()).apply { letterSpacing=0.12f },lp(-1,-2))
-        behaviour.addView(label(
-            "Bluetooth microphone only • no phone-mic fallback • automatic reconnect • Android recording indicator remains visible.",
-            11.5f,0xFF8799AB.toInt()
-        ),lp(-1,-2))
-        root.addView(behaviour,lp(-1,-2))
-
-        savedRecordingsButton=smallButton("VIEW SAVED RECORDINGS").apply {
-            textSize=12f
-            visibility=View.GONE
-            setOnClickListener { showLibraryScreen() }
+        timerCaption = label("3D RECORD ORB • READY", 15f, 0xFFA985C8.toInt()).apply {
+            gravity = Gravity.CENTER
+            letterSpacing = 0.05f
         }
-        root.addView(savedRecordingsButton,lp(-1,52))
+        root.addView(timerCaption, lp(-1, 34))
 
+        root.addView(label("No captured audio is played live.", 10.5f, 0xFF687080.toInt()).apply {
+            gravity = Gravity.CENTER
+        }, lp(-1, 24))
+
+        val nav = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(dp(4), dp(4), dp(4), dp(8))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(18).toFloat()
+                setColor(0xFF171321.toInt())
+                setStroke(dp(1), 0xFF2C253A.toInt())
+            }
+        }
+        nav.addView(navItem("▰", "Library") { showLibraryScreen() }, LinearLayout.LayoutParams(0, dp(76), 1f))
+        nav.addView(navItem("⚙", "Settings") { Toast.makeText(this, "Settings", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(0, dp(76), 1f))
+        nav.addView(navItem("◖))", "Volume") { Toast.makeText(this, "Playback volume is controlled by Android.", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(0, dp(76), 1f))
+        root.addView(nav, LinearLayout.LayoutParams(-1, dp(86)))
+
+        savedRecordingsButton = TextView(this).apply { visibility = View.GONE }
         setContentView(root)
+        refreshStatus()
+        refreshLibrary()
+    }
+
+    private fun navItem(icon: String, title: String, action: () -> Unit) = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { action() }
+        addView(label(icon, 25f, 0xFFA87BE0.toInt()).apply {
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+        }, LinearLayout.LayoutParams(-1, dp(38)))
+        addView(label(title, 12.5f, 0xFFB99ACD.toInt()).apply {
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(-1, dp(28)))
     }
 
     private fun refreshStatus() {
-        if (!::statusContainer.isInitialized) return
-        val enabled=BluetoothAdapter.getDefaultAdapter()?.isEnabled==true
-        val input=findBluetoothInput()
-        val permission=checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED
-        val connected=enabled && permission && input!=null
-        statusContainer.removeAllViews()
-        val row=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL; minimumHeight=dp(36) }
-        row.addView(label("●",15f,if(connected)0xFF54E6A7.toInt() else 0xFFFF687D.toInt()),LinearLayout.LayoutParams(dp(22),-2))
-        row.addView(label(if(connected)"CONNECTED" else "NOT CONNECTED",13f,if(connected)0xFFBDEBFF.toInt() else 0xFFFFA0AD.toInt()).apply{typeface=Typeface.DEFAULT_BOLD},LinearLayout.LayoutParams(0,-2,0.42f))
-        row.addView(label(if(connected)(input?.let{friendlyDeviceName(it)}?:"Bluetooth microphone ready") else "Connect earbuds with a microphone",11f,0xFF7F95AA.toInt()).apply{
-            gravity=Gravity.END; maxLines=1; ellipsize=android.text.TextUtils.TruncateAt.END
-        },LinearLayout.LayoutParams(0,-2,0.58f))
-        statusContainer.addView(row)
-        recordButton.isEnabled=recording||connected
-        recordButton.alpha=if(recordButton.isEnabled)1f else .42f
+        val enabled = BluetoothAdapter.getDefaultAdapter()?.isEnabled == true
+        val input = findBluetoothInput()
+        val permission = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        val connected = enabled && permission && input != null
+
+        if (::recordOrb.isInitialized) {
+            recordOrb.isEnabled = recording || connected
+            recordOrb.isRecording = recording
+            recordOrb.connectionReady = connected
+            recordOrb.alpha = if (recordOrb.isEnabled) 1f else .42f
+        }
+
+        val status = findViewById<View>(android.R.id.content).findViewWithTag<TextView>("main_status")
+        status?.text = if (connected) {
+            "CONNECTED: " + friendlyDeviceName(input!!) + " • STABLE LINK"
+        } else {
+            "NOT CONNECTED • CONNECT BLUETOOTH EARBUD MICROPHONE"
+        }
     }
 
     private fun toggleRecording() {
@@ -222,9 +262,11 @@ class MainActivity : Activity() {
 
     private fun updateRecordingUi() {
         if (recording) {
-            timerCaption.text = "RECORDING • BLUETOOTH MICROPHONE"
-            recordButton.text = "■  STOP & SAVE"
-            recordButton.background = recordButtonBackground(true)
+            timerCaption.text = "3D RECORD ORB • ACTIVE"
+            if (::recordOrb.isInitialized) {
+                recordOrb.isRecording = true
+                recordOrb.connectionReady = true
+            }
             if (pulse == null) {
                 pulse = ObjectAnimator.ofFloat(recordButton, View.ALPHA, 1f, .72f, 1f).apply {
                     duration = 1100
@@ -233,12 +275,10 @@ class MainActivity : Activity() {
                 }
             }
         } else {
-            timerCaption.text = "READY"
-            recordButton.text = "●  START RECORDING"
-            recordButton.background = recordButtonBackground(false)
+            timerCaption.text = "3D RECORD ORB • READY"
+            if (::recordOrb.isInitialized) recordOrb.isRecording = false
             pulse?.cancel()
             pulse = null
-            recordButton.alpha = if (recordButton.isEnabled) 1f else .42f
             liveWave.clear()
         }
     }
@@ -969,6 +1009,92 @@ class MainActivity : Activity() {
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
+    class RecordOrbView(c: Context) : View(c) {
+        var isRecording = false
+            set(value) { field = value; invalidate() }
+        var connectionReady = false
+            set(value) { field = value; invalidate() }
+        var level = 0f
+            set(value) { field = value.coerceIn(0f, 1f); invalidate() }
+
+        private var phase = 0f
+        private val tick = object : Runnable {
+            override fun run() {
+                phase += if (isRecording) 0.075f else 0.025f
+                invalidate()
+                postDelayed(this, 32L)
+            }
+        }
+
+        init { post(tick) }
+
+        override fun onDraw(canvas: Canvas) {
+            val cx = width / 2f
+            val cy = height * .52f
+            val base = minOf(width, height) * .30f
+            val wave = (kotlin.math.sin(phase.toDouble()).toFloat() + 1f) * .5f
+            val accent = if (isRecording) 0xFFFF63C7.toInt() else 0xFFA96BFF.toInt()
+            val cyan = 0xFF48E5FF.toInt()
+
+            val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+            for (i in 0..7) {
+                ring.strokeWidth = if (i == 0) 5f else 2f
+                ring.color = if (i % 2 == 0) accent else cyan
+                ring.alpha = (190 - i * 20).coerceAtLeast(35)
+                val r = base * (1.05f + i * .055f) + wave * 3f
+                canvas.drawCircle(cx, cy + 5f, r, ring)
+            }
+
+            val glow = Paint(Paint.ANTI_ALIAS_FLAG)
+            glow.shader = RadialGradient(cx, cy, base * 1.45f,
+                intArrayOf(0xFF6B3A74.toInt(), accent, 0xFF17101F.toInt(), 0x00000000),
+                floatArrayOf(0f, .35f, .72f, 1f), Shader.TileMode.CLAMP)
+            canvas.drawCircle(cx, cy, base * 1.45f, glow)
+
+            val body = Paint(Paint.ANTI_ALIAS_FLAG)
+            body.shader = RadialGradient(cx - base * .28f, cy - base * .4f, base * 1.3f,
+                intArrayOf(0xFF9B99A5.toInt(), 0xFF302D3A.toInt(), 0xFF07070B.toInt()),
+                floatArrayOf(0f, .36f, 1f), Shader.TileMode.CLAMP)
+            canvas.drawCircle(cx, cy, base, body)
+
+            val floor = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = base * .16f
+                color = accent
+                alpha = 225
+            }
+            canvas.drawArc(RectF(cx - base * 1.25f, cy + base * .15f,
+                cx + base * 1.25f, cy + base * .78f), 195f, 150f, false, floor)
+
+            val mic = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = if (connectionReady) 0xFFD7B8FF.toInt() else 0xFF756A80.toInt()
+                style = Paint.Style.STROKE
+                strokeWidth = base * .105f
+                strokeCap = Paint.Cap.ROUND
+            }
+            val mr = base * .27f
+            canvas.drawRoundRect(RectF(cx - mr, cy - mr * 1.35f, cx + mr, cy + mr * .55f), mr, mr, mic)
+            canvas.drawArc(RectF(cx - mr * 1.45f, cy - mr * .2f, cx + mr * 1.45f, cy + mr * 1.65f), 0f, 180f, false, mic)
+            canvas.drawLine(cx, cy + mr * 1.65f, cx, cy + mr * 2.15f, mic)
+            canvas.drawLine(cx - mr * .75f, cy + mr * 2.15f, cx + mr * .75f, cy + mr * 2.15f, mic)
+
+            if (isRecording) {
+                val bars = 17
+                val barsPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = cyan
+                    strokeWidth = 4f
+                    strokeCap = Paint.Cap.ROUND
+                }
+                for (i in 0 until bars) {
+                    val a = (i - bars / 2f) / (bars / 2f)
+                    val h = base * .28f * (1f - kotlin.math.abs(a)) * (0.35f + level * 1.4f)
+                    val x = cx + a * base * 1.05f
+                    canvas.drawLine(x, cy + base * .95f, x, cy + base * .95f - h, barsPaint)
+                }
+            }
+        }
+    }
+
     class LiveWaveformView(c: Context) : View(c) {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = 0xFF64D8FF.toInt()
@@ -990,6 +1116,12 @@ class MainActivity : Activity() {
         override fun onDraw(c: Canvas) {
             super.onDraw(c)
             val mid = height / 2f
+            if (width <= 0) return
+            paint.shader = LinearGradient(
+                0f, 0f, width.toFloat(), 0f,
+                intArrayOf(0xFFB65CFF.toInt(), 0xFF7C87D9.toInt(), 0xFF4BE4F0.toInt()),
+                null, Shader.TileMode.CLAMP
+            )
             val step = width / levels.size.toFloat()
             levels.forEachIndexed { i, v ->
                 val h = (v * height * .9f).coerceAtLeast(2f)
