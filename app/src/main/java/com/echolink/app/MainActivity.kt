@@ -454,7 +454,7 @@ class MainActivity : Activity() {
             if (mode == PlaybackMode.BOOST) {
                 // Playback-only boost avoids rewriting PCM and makes the change
                 // immediately audible without introducing digital artifacts.
-                mp.setVolume(6.0f, 6.0f)
+                mp.setVolume(1.0f, 1.0f)
             } else {
                 mp.setVolume(1.0f, 1.0f)
             }
@@ -516,12 +516,103 @@ class MainActivity : Activity() {
         releasePlayer(); startPlayback(file,playButton,seek,position,rate,mode)
     }
     private fun createProcessedFile(source: File, mode: PlaybackMode): File {
-        // CLEAR currently uses the original PCM unchanged. BOOST is handled at
-        // playback time instead, so this path is only retained for CLEAR.
-        if (mode == PlaybackMode.CLEAR) {
-            return source
+        if (mode == PlaybackMode.BOOST) {
+            return createGainFile(source, 3.5f, "_boost_v7")
         }
-        return source
+
+        return createSpeechFile(source)
+    }
+
+    private fun createGainFile(source: File, gain: Float, suffix: String): File {
+        val dir = File(cacheDir, "processed").apply { mkdirs() }
+        val target = File(dir, source.nameWithoutExtension + suffix + ".wav")
+
+        RandomAccessFile(source, "r").use { input ->
+            val payload = (input.length() - 44L).coerceAtLeast(0L)
+            RandomAccessFile(target, "rw").use { out ->
+                out.setLength(0)
+                writeWavHeader(out, payload)
+                input.seek(44L)
+                val buffer = ByteArray(8192)
+                var remaining = payload
+
+                while (remaining > 0L) {
+                    val n = input.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
+                    if (n <= 0) break
+                    var i = 0
+                    while (i + 1 < n) {
+                        val raw = (buffer[i].toInt() and 0xFF) or (buffer[i + 1].toInt() shl 8)
+                        val sample = if ((raw and 0x8000) != 0) raw - 65536 else raw
+                        val x = sample / 32768.0
+                        // 3.5x gain with soft saturation, so quiet speech becomes
+                        // substantially louder without turning peaks into wraparound.
+                        val y = kotlin.math.tanh(x * gain)
+                        val v = (y * 32767.0).toInt().coerceIn(-32768, 32767)
+                        buffer[i] = (v and 0xFF).toByte()
+                        buffer[i + 1] = (v shr 8).toByte()
+                        i += 2
+                    }
+                    out.write(buffer, 0, n)
+                    remaining -= n.toLong()
+                }
+            }
+        }
+        return target
+    }
+
+    private fun createSpeechFile(source: File): File {
+        val dir = File(cacheDir, "processed").apply { mkdirs() }
+        val target = File(dir, source.nameWithoutExtension + "_speech_v7.wav")
+
+        RandomAccessFile(source, "r").use { input ->
+            val payload = (input.length() - 44L).coerceAtLeast(0L)
+            RandomAccessFile(target, "rw").use { out ->
+                out.setLength(0)
+                writeWavHeader(out, payload)
+                input.seek(44L)
+
+                val buffer = ByteArray(8192)
+                var remaining = payload
+
+                // Speech-band filter:
+                // high-pass removes very low rumble; low-pass removes hiss.
+                // The combination keeps the middle speech region prominent.
+                var hpPrevX = 0.0
+                var hpPrevY = 0.0
+                var lp = 0.0
+
+                while (remaining > 0L) {
+                    val n = input.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
+                    if (n <= 0) break
+                    var i = 0
+
+                    while (i + 1 < n) {
+                        val raw = (buffer[i].toInt() and 0xFF) or (buffer[i + 1].toInt() shl 8)
+                        val sample = if ((raw and 0x8000) != 0) raw - 65536 else raw
+                        val x = sample / 32768.0
+
+                        // ~100 Hz high-pass, then ~5 kHz low-pass at 16 kHz sample rate.
+                        val hp = 0.985 * (hpPrevY + x - hpPrevX)
+                        hpPrevX = x
+                        hpPrevY = hp
+
+                        lp += 0.38 * (hp - lp)
+
+                        // Modest speech lift after filtering.
+                        val y = (lp * 1.35).coerceIn(-1.0, 1.0)
+                        val v = (y * 32767.0).toInt().coerceIn(-32768, 32767)
+
+                        buffer[i] = (v and 0xFF).toByte()
+                        buffer[i + 1] = (v shr 8).toByte()
+                        i += 2
+                    }
+
+                    out.write(buffer, 0, n)
+                    remaining -= n.toLong()
+                }
+            }
+        }
+        return target
     }
 
     private fun writeWavHeader(r:RandomAccessFile,size:Long){
