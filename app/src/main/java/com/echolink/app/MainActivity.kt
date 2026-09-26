@@ -194,8 +194,12 @@ class MainActivity : Activity() {
         }
         val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
+        // The old full-width divider/waveform was visually noisy and added no
+        // useful information while idle. The microphone meter remains inside
+        // the orb during recording, so the home screen stays clean.
         liveWave = LiveWaveformView(this)
-        content.addView(liveWave, lp(-1, 84))
+        liveWave.visibility = View.GONE
+        content.addView(liveWave, lp(-1, 0))
 
         timerText = label("00:00", 48f, Color.WHITE).apply {
             gravity = Gravity.CENTER
