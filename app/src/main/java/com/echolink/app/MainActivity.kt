@@ -10,6 +10,8 @@ import android.graphics.*
 import android.media.*
 import android.os.*
 import android.view.*
+import android.window.OnBackInvokedCallback
+import android.window.OnBackInvokedDispatcher
 import android.widget.*
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.StateListDrawable
@@ -37,6 +39,8 @@ class MainActivity : Activity() {
     private var activeSeek: SeekBar? = null
     private var activePosition: TextView? = null
     private var exportFile: File? = null
+    private var currentScreen = "home"
+    private var backCallback: OnBackInvokedCallback? = null
     private val processorExecutor = Executors.newSingleThreadExecutor()
 
     private val handler = Handler(Looper.getMainLooper())
@@ -87,6 +91,20 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= 33) {
+            backCallback = OnBackInvokedCallback {
+                when (currentScreen) {
+                    "home" -> moveTaskToBack(true)
+                    "library", "settings", "volume" -> buildUi()
+                    "adjustments" -> showLibraryScreen()
+                    else -> buildUi()
+                }
+            }
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                backCallback!!
+            )
+        }
         window.statusBarColor = Color.rgb(5, 8, 16)
         window.navigationBarColor = Color.rgb(5, 8, 16)
         buildUi()
@@ -115,6 +133,9 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            backCallback?.let { getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(it) }
+        }
         handler.removeCallbacksAndMessages(null)
         pulse?.cancel()
         releasePlayer()
@@ -123,7 +144,18 @@ class MainActivity : Activity() {
         super.onDestroy()
     }
 
+    @Suppress("DEPRECATION")
+    override fun onBackPressed() {
+        when (currentScreen) {
+            "home" -> super.onBackPressed()
+            "library", "settings", "volume" -> buildUi()
+            "adjustments" -> showLibraryScreen()
+            else -> buildUi()
+        }
+    }
+
     private fun buildUi() {
+        currentScreen = "home"
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), dp(12), dp(14), 0)
@@ -294,6 +326,7 @@ class MainActivity : Activity() {
     }
 
     private fun showLibraryScreen() {
+        currentScreen = "library"
         val root = pageRoot()
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -347,6 +380,7 @@ class MainActivity : Activity() {
     }
 
     private fun showSettingsScreen() {
+        currentScreen = "settings"
         val root = pageRoot()
         root.addView(pageTitle("SETTINGS", "Device connection and recording information"))
         val card = panel()
@@ -367,6 +401,7 @@ class MainActivity : Activity() {
     }
 
     private fun showVolumeScreen() {
+        currentScreen = "volume"
         val root = pageRoot()
         root.addView(pageTitle("VOLUME CONTROL", "Playback volume for saved recordings"))
         val card = panel().apply { gravity = Gravity.CENTER_HORIZONTAL }
@@ -643,6 +678,7 @@ class MainActivity : Activity() {
         initial: AudioSettings,
         onApplied: (AudioSettings) -> Unit
     ) {
+        currentScreen = "adjustments"
         val root = pageRoot()
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
