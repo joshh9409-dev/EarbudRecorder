@@ -30,7 +30,6 @@ class MainActivity : Activity() {
     private lateinit var recordButton: TextView
     private lateinit var timerText: TextView
     private lateinit var timerCaption: TextView
-    private lateinit var meter: ProgressBar
     private lateinit var liveWave: LiveWaveformView
     private lateinit var savedRecordingsButton: TextView
     private lateinit var libraryContainer: LinearLayout
@@ -71,8 +70,8 @@ class MainActivity : Activity() {
             if (intent.action != RecordingService.ACTION_STATE) return
             recording = intent.getBooleanExtra(RecordingService.EXTRA_RECORDING, false)
             timerText.text = intent.getStringExtra(RecordingService.EXTRA_TIMER) ?: "00:00"
-            meter.progress = intent.getIntExtra(RecordingService.EXTRA_METER, 0)
-            liveWave.setLevel(meter.progress / 100f)
+            val inputLevel = intent.getIntExtra(RecordingService.EXTRA_METER, 0)
+            liveWave.setLevel(inputLevel / 100f)
             updateRecordingUi()
             if (!recording) {
                 refreshStatus()
@@ -245,7 +244,6 @@ class MainActivity : Activity() {
             pulse?.cancel()
             pulse = null
             recordButton.alpha = if (recordButton.isEnabled) 1f else .42f
-            meter.progress = 0
             liveWave.clear()
         }
     }
