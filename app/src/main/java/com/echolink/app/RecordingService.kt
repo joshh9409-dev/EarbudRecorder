@@ -33,7 +33,8 @@ class RecordingService : Service() {
     private var headset:BluetoothHeadset?=null
     private var headsetDevice:BluetoothDevice?=null
     private var sensitivity=0
-    private var dataBytes=0L\n    private var recorderBufferSize=4096
+    private var dataBytes=0L
+    private var recorderBufferSize=4096
     private var startedAt=0L
     private val handler=Handler(Looper.getMainLooper())
     private val retry=object:Runnable{override fun run(){if(running && recorder==null)tryResumeBluetooth();if(running)handler.postDelayed(this,1500)}}
@@ -105,7 +106,8 @@ class RecordingService : Service() {
         try{
             val minBuf=AudioRecord.getMinBufferSize(RATE,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT)
             if(minBuf<=0)return false
-            val r=AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION,RATE,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,minBuf*2)\n            recorderBufferSize=minBuf*2
+            val r=AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION,RATE,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,minBuf*2)
+            recorderBufferSize=minBuf*2
             if(r.state!=AudioRecord.STATE_INITIALIZED){r.release();return false}
             val d=findBluetoothInput() ?: run{r.release();return false}
             if(Build.VERSION.SDK_INT>=23 && !r.setPreferredDevice(d)){r.release();return false}
