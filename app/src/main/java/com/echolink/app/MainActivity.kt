@@ -596,13 +596,7 @@ class MainActivity : Activity() {
             seek.progress = 0
             position.text = "00:00 / " + formatMillis(knownDuration)
 
-            if (mode == PlaybackMode.BOOST) {
-                // Playback-only boost avoids rewriting PCM and makes the change
-                // immediately audible without introducing digital artifacts.
-                mp.setVolume(1.0f, 1.0f)
-            } else {
-                mp.setVolume(1.0f, 1.0f)
-            }
+            mp.setVolume(1.0f, 1.0f)
 
             mp.setAudioAttributes(
                 AudioAttributes.Builder()
