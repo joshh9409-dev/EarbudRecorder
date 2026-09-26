@@ -97,7 +97,8 @@ class RecordingService : Service() {
             return
         }
 
-        sensitivity = level.coerceIn(0, 100)
+        // Recording input stays at a clean, fixed gain. Post-save tools handle playback adjustment.
+        sensitivity = 0
         finalized = false
         dataBytes = 0L
 
@@ -169,9 +170,6 @@ class RecordingService : Service() {
                     val n = r.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
 
                     if (n > 0) {
-                        val gain = 1f + (sensitivity / 100f) * 1.5f
-                        if (sensitivity > 0) applyGain(buffer, n, gain)
-
                         synchronized(fileLock) {
                             if (out != null) {
                                 out!!.write(buffer, 0, n)
