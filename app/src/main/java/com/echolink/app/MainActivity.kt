@@ -726,6 +726,20 @@ class MainActivity : Activity() {
         val key = (safeBoost * 100).toInt()
         val target = File(dir, source.nameWithoutExtension + "_boost_" + key + ".wav")
 
+        /*
+         * Do not simply multiply every sample by the boost amount.
+         * That makes normal speech hit 0 dBFS and hard-clip, which sounds
+         * harsh and "screaming". Instead use a gentler pre-gain followed by
+         * a speech-friendly compressor and a soft ceiling.
+         *
+         * 100% is bit-for-bit equivalent to the original recording because
+         * this function is only called for values above 100%.
+         */
+        val preGain = 1f + (safeBoost - 1f) * 0.75f
+        val threshold = 0.34f
+        val ratio = 5.0f
+        val ceiling = 0.90f
+
         RandomAccessFile(source, "r").use { input ->
             val payload = (input.length() - 44L).coerceAtLeast(0L)
             RandomAccessFile(target, "rw").use { out ->
@@ -738,15 +752,38 @@ class MainActivity : Activity() {
                 while (remaining > 0L) {
                     val n = input.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
                     if (n <= 0) break
+
                     var i = 0
                     while (i + 1 < n) {
                         val raw = (buffer[i].toInt() and 0xFF) or (buffer[i + 1].toInt() shl 8)
                         val sample = if ((raw and 0x8000) != 0) raw - 65536 else raw
-                        val boosted = (sample * safeBoost).coerceIn(-32768f, 32767f).toInt()
+                        val inputSample = sample / 32768f
+                        val sign = if (inputSample < 0f) -1f else 1f
+                        var magnitude = kotlin.math.abs(inputSample) * preGain
+
+                        // Smooth static compression keeps louder speech from
+                        // slamming into the digital ceiling after boosting.
+                        if (magnitude > threshold) {
+                            magnitude = threshold + (magnitude - threshold) / ratio
+                        }
+
+                        // Soft ceiling instead of hard clipping. This avoids
+                        // the brittle, distorted sound caused by simple clamping.
+                        if (magnitude > ceiling) {
+                            val excess = (magnitude - ceiling) / (1f - ceiling)
+                            magnitude = ceiling + (1f - ceiling) *
+                                (1f - 1f / (1f + excess))
+                        }
+
+                        val output = (sign * magnitude)
+                            .coerceIn(-ceiling, ceiling)
+                        val boosted = (output * 32767f).toInt()
+
                         buffer[i] = (boosted and 0xFF).toByte()
                         buffer[i + 1] = (boosted shr 8).toByte()
                         i += 2
                     }
+
                     out.write(buffer, 0, n)
                     remaining -= n.toLong()
                 }
