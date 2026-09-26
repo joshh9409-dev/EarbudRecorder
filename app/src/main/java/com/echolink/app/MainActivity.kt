@@ -134,7 +134,7 @@ class MainActivity : Activity() {
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(14), dp(18), dp(28))
+            setPadding(dp(18), dp(42), dp(18), dp(32))
             setBackgroundColor(Color.rgb(5, 8, 16))
         }
         scroll.addView(root)
@@ -142,14 +142,14 @@ class MainActivity : Activity() {
         scroll.setOnApplyWindowInsetsListener { _, insets ->
             if (Build.VERSION.SDK_INT >= 30) {
                 val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
-                root.setPadding(dp(18) + bars.left, dp(14) + bars.top, dp(18) + bars.right, dp(28) + bars.bottom)
+                root.setPadding(dp(18) + bars.left, dp(42) + bars.top, dp(18) + bars.right, dp(32) + bars.bottom)
             } else {
                 @Suppress("DEPRECATION")
                 root.setPadding(
                     dp(18) + insets.systemWindowInsetLeft,
-                    dp(14) + insets.systemWindowInsetTop,
+                    dp(42) + insets.systemWindowInsetTop,
                     dp(18) + insets.systemWindowInsetRight,
-                    dp(28) + insets.systemWindowInsetBottom
+                    dp(32) + insets.systemWindowInsetBottom
                 )
             }
             insets
@@ -198,7 +198,7 @@ class MainActivity : Activity() {
             minHeight = dp(58)
             setOnClickListener { toggleRecording() }
         }
-        root.addView(recordButton, lp(-1, 62))
+        root.addView(recordButton, lp(-1, 66))
 
         root.addView(label("INPUT MONITOR", 11f, 0xFF7890A5.toInt()).apply {
             setPadding(dp(4), dp(14), dp(4), dp(6))
@@ -316,6 +316,7 @@ class MainActivity : Activity() {
         }
         left.maxLines = 2
         right.maxLines = 2
+        right.ellipsize = null
         right.setPadding(dp(4), 0, 0, 0)
         row.addView(left, LinearLayout.LayoutParams(0, -2, 0.38f))
         row.addView(right, LinearLayout.LayoutParams(0, -2, 0.62f))
@@ -391,24 +392,24 @@ class MainActivity : Activity() {
         val title = humanFileTitle(file)
         card.addView(label(title, 15f, Color.WHITE).apply {
             typeface = Typeface.DEFAULT_BOLD
-        }, lp(-1, 34))
+        }, lp(-1, -2))
         card.addView(label(
             formatSize(file.length()) + "  •  " + duration(file) + "  •  WAV PCM",
             11.5f, 0xFF8EA4B8.toInt()
-        ), lp(-1, 25))
+        ), lp(-1, -2))
 
         val wave = WaveformView(this)
         wave.load(file)
         card.addView(wave, lp(-1, 60))
 
         val position = label("00:00 / " + duration(file), 10.5f, 0xFF8195A8.toInt())
-        card.addView(position, lp(-1, 24))
+        card.addView(position, lp(-1, -2))
 
         val seek = SeekBar(this).apply {
             max = durationMillis(file).coerceAtLeast(1).toInt()
             progress = 0
         }
-        card.addView(seek, lp(-1, 30))
+        card.addView(seek, lp(-1, 42))
 
         val row1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val play = smallButton("PLAY")
@@ -416,14 +417,14 @@ class MainActivity : Activity() {
         val fwd = smallButton("+10s")
         val speed = smallButton("1×")
         listOf(play, back, fwd, speed).forEach { row1.addView(it, weightLp()) }
-        card.addView(row1, lp(-1, 44))
+        card.addView(row1, lp(-1, 46))
 
         val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val boost = smallButton("BOOST")
         val export = smallButton("EXPORT")
         val del = smallButton("DELETE")
         listOf(boost, export, del).forEach { row2.addView(it, weightLp()) }
-        card.addView(row2, lp(-1, 44))
+        card.addView(row2, lp(-1, 46))
 
         var rate = 1f
         var boosted = false
@@ -704,7 +705,7 @@ class MainActivity : Activity() {
         text = t
         textSize = s
         setTextColor(c)
-        includeFontPadding = false
+        includeFontPadding = true
     }
 
     private fun panel() = LinearLayout(this).apply {
@@ -729,6 +730,7 @@ class MainActivity : Activity() {
 
     private fun smallButton(t: String) = TextView(this).apply {
         text = t
+        minHeight = dp(42)
         textSize = 10.5f
         gravity = Gravity.CENTER
         setTextColor(Color.WHITE)
@@ -744,7 +746,7 @@ class MainActivity : Activity() {
         setMargins(0, dp(4), 0, dp(4))
     }
 
-    private fun weightLp() = LinearLayout.LayoutParams(0, -1, 1f).apply {
+    private fun weightLp() = LinearLayout.LayoutParams(0, dp(42), 1f).apply {
         setMargins(dp(2), 0, dp(2), 0)
     }
 
