@@ -388,7 +388,10 @@ class MainActivity : Activity() {
     }
 
     private fun addRecordingCard(file: File) {
-        val card = panel()
+        val card = panel().apply {
+            clipChildren = false
+            clipToPadding = false
+        }
         val title = humanFileTitle(file)
         card.addView(label(title, 15f, Color.WHITE).apply {
             typeface = Typeface.DEFAULT_BOLD
@@ -411,20 +414,30 @@ class MainActivity : Activity() {
         }
         card.addView(seek, lp(-1, 46))
 
-        val row1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val row1 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            clipChildren = false
+            clipToPadding = false
+        }
         val play = smallButton("PLAY")
         val back = smallButton("−10s")
         val fwd = smallButton("+10s")
         val speed = smallButton("1×")
-        listOf(play, back, fwd, speed).forEach { row1.addView(it, weightLp()) }
-        card.addView(row1, lp(-1, 46))
+        listOf(play, back, fwd, speed).forEach { row1.addView(it, rowButtonLp()) }
+        card.addView(row1, controlRowLp())
 
-        val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val row2 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            clipChildren = false
+            clipToPadding = false
+        }
         val boost = smallButton("BOOST")
         val export = smallButton("EXPORT")
         val del = smallButton("DELETE")
-        listOf(boost, export, del).forEach { row2.addView(it, weightLp()) }
-        card.addView(row2, lp(-1, 46))
+        listOf(boost, export, del).forEach { row2.addView(it, rowButtonLp()) }
+        card.addView(row2, controlRowLp())
 
         var rate = 1f
         var boosted = false
@@ -470,7 +483,7 @@ class MainActivity : Activity() {
         boost.setOnClickListener {
             boosted = !boosted
             boost.text = if (boosted) "BOOST ON" else "BOOST"
-            if (activeFile == file) player?.volume = 1f
+            if (activeFile == file) player?.volume = if (boosted) 1f else 1f
         }
         export.setOnClickListener {
             exportFile = file
@@ -740,7 +753,11 @@ class MainActivity : Activity() {
         setMargins(0, dp(4), 0, dp(4))
     }
 
-    private fun weightLp() = LinearLayout.LayoutParams(0, dp(44), 1f).apply {
+    private fun controlRowLp() = LinearLayout.LayoutParams(-1, dp(52)).apply {
+        setMargins(0, dp(2), 0, dp(2))
+    }
+
+    private fun rowButtonLp() = LinearLayout.LayoutParams(0, dp(46), 1f).apply {
         setMargins(dp(2), 0, dp(2), 0)
     }
 
