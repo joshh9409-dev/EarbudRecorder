@@ -742,7 +742,7 @@ class MainActivity : Activity() {
                     while (i + 1 < n) {
                         val raw = (buffer[i].toInt() and 0xFF) or (buffer[i + 1].toInt() shl 8)
                         val sample = if ((raw and 0x8000) != 0) raw - 65536 else raw
-                        val boosted = (sample * safeBoost).coerceIn(-32768.0, 32767.0).toInt()
+                        val boosted = (sample * safeBoost).coerceIn(-32768f, 32767f).toInt()
                         buffer[i] = (boosted and 0xFF).toByte()
                         buffer[i + 1] = (boosted shr 8).toByte()
                         i += 2
