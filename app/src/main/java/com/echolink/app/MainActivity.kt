@@ -509,8 +509,7 @@ class MainActivity : Activity() {
     }
     private fun createProcessedFile(source: File, mode: PlaybackMode): File {
         val dir = File(cacheDir, "processed").apply { mkdirs() }
-        // Versioned cache names ensure older, overly aggressive processing is never reused.
-        val suffix = if (mode == PlaybackMode.BOOST) "_boost_v3" else "_clear_v3"
+        val suffix = if (mode == PlaybackMode.BOOST) "_boost_v4" else "_clear_v4"
         val target = File(dir, source.nameWithoutExtension + suffix + ".wav")
 
         RandomAccessFile(source, "r").use { input ->
@@ -521,9 +520,7 @@ class MainActivity : Activity() {
                 input.seek(44)
 
                 val buffer = ByteArray(8192)
-                var previousInput = 0f
-                var highPassState = 0f
-                var lowPassState = 0f
+                var filtered = 0f
                 var remaining = size
 
                 while (remaining > 0L) {
@@ -532,30 +529,27 @@ class MainActivity : Activity() {
 
                     var i = 0
                     while (i + 1 < n) {
-                        val raw = (buffer[i].toInt() and 255) or (buffer[i + 1].toInt() shl 8)
-                        val sample = if (raw and 0x8000 != 0) raw - 65536 else raw
-                        val x = sample / 32768f
+                        val raw = (buffer[i].toInt() and 0xFF) or (buffer[i + 1].toInt() shl 8)
+                        val sample = if ((raw and 0x8000) != 0) raw - 65536 else raw
+                        val inputSample = sample / 32768f
+
+                        // Keep the processing deliberately conservative. The previous
+                        // high-pass/differentiator could turn Bluetooth mic hiss into
+                        // a very loud modem-like screech.
+                        filtered += 0.74f * (inputSample - filtered)
 
                         val processed = if (mode == PlaybackMode.BOOST) {
-                            // Moderate speech gain with plenty of headroom. BOOST must not
-                            // turn ordinary speech into a clipped, painfully loud signal.
-                            val gain = 1.25f
-                            kotlin.math.tanh(x * gain * 1.05f) / kotlin.math.tanh(1.05f)
+                            // Mild boost after smoothing, with soft limiting.
+                            val boosted = filtered * 1.18f
+                            kotlin.math.tanh(boosted * 1.05f) / kotlin.math.tanh(1.05f)
                         } else {
-                            // CLEAR is a gentle speech band-pass, not a treble booster.
-                            // Remove very low rumble and very high hiss while keeping the
-                            // original level essentially unchanged.
-                            val highPassed = 0.97f * (highPassState + x - previousInput)
-                            previousInput = x
-                            highPassState = highPassed
-
-                            // Approx. 4.5 kHz one-pole low-pass at 16 kHz sample rate.
-                            lowPassState += 0.64f * (highPassed - lowPassState)
-                            lowPassState.coerceIn(-1f, 1f)
+                            // CLEAR removes some hiss/harshness by gently low-passing.
+                            // It intentionally adds no gain.
+                            filtered * 0.96f
                         }
 
                         val v = (processed * 32767f).toInt().coerceIn(-32768, 32767)
-                        buffer[i] = (v and 255).toByte()
+                        buffer[i] = (v and 0xFF).toByte()
                         buffer[i + 1] = (v shr 8).toByte()
                         i += 2
                     }
