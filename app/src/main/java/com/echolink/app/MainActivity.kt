@@ -724,28 +724,25 @@ class MainActivity : Activity() {
         val safeBoost = boost.coerceIn(1f, 4f)
         val dir = File(cacheDir, "boosted").apply { mkdirs() }
         val key = (safeBoost * 100).toInt()
-        val target = File(dir, source.nameWithoutExtension + "_boost_" + key + ".wav")
+        val target = File(dir, source.nameWithoutExtension + "_boost_v2_" + key + ".wav")
 
         /*
-         * Playback-only clean gain.
+         * Playback-only loudness processing.
          *
-         * The previous version used compression and a nonlinear soft ceiling.
-         * That processing could reshape speech transients and make Bluetooth
-         * speech sound like a harsh/jumbled screech. This version keeps the
-         * waveform linear: quiet samples are amplified by a controlled gain,
-         * while a simple look-ahead peak gain prevents samples from exceeding
-         * the PCM ceiling. The original recording is never changed.
+         * First normalize the recording to a safe peak, then apply the user's
+         * requested boost. This makes the slider useful even when the source
+         * recording has a lot of headroom. A final peak ceiling prevents PCM
+         * clipping. The original recording is never changed.
          */
-        val gain = safeBoost
-
         RandomAccessFile(source, "r").use { input ->
             val payload = (input.length() - 44L).coerceAtLeast(0L)
             RandomAccessFile(target, "rw").use { out ->
                 out.setLength(0)
-                writeWavHeader(out, payload)
 
                 input.seek(44L)
-                val sourceData = ByteArray(payload.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+                val sourceData = ByteArray(
+                    payload.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                )
                 var offset = 0
                 while (offset < sourceData.size) {
                     val n = input.read(sourceData, offset, sourceData.size - offset)
@@ -753,8 +750,6 @@ class MainActivity : Activity() {
                     offset += n
                 }
 
-                // Find the absolute peak first so the entire waveform can be
-                // scaled uniformly. This preserves the shape of speech.
                 var peak = 1
                 var i = 0
                 while (i + 1 < offset) {
@@ -765,21 +760,34 @@ class MainActivity : Activity() {
                     i += 2
                 }
 
-                val safePeak = peak.toFloat()
-                val requestedPeak = safePeak * gain
-                val scale = if (requestedPeak > 30000f) {
-                    30000f / safePeak
+                /*
+                 * Normalize a quiet recording up to a safe reference peak.
+                 * Then apply the selected boost. The final ceiling is kept
+                 * slightly below full-scale to leave a little safety margin.
+                 */
+                val normalization = 30000f / peak.toFloat()
+                val requested = normalization * safeBoost
+                val finalScale = if (peak.toFloat() * requested > 30000f) {
+                    30000f / peak.toFloat()
                 } else {
-                    gain
+                    requested
                 }
+
+                // For high boost settings, normalize first and then apply the
+                // requested gain while retaining the maximum possible peak.
+                // If the requested gain would clip, the whole waveform is
+                // scaled uniformly to the safe ceiling.
+                val effectiveScale = minOf(requested, 30000f / peak.toFloat())
+
+                writeWavHeader(out, offset.toLong())
 
                 i = 0
                 while (i + 1 < offset) {
                     val raw = (sourceData[i].toInt() and 0xFF) or
                         ((sourceData[i + 1].toInt() and 0xFF) shl 8)
                     val sample = if ((raw and 0x8000) != 0) raw - 65536 else raw
-                    val boosted = (sample * scale)
-                        .coerceIn(-32768f, 32767f)
+                    val boosted = (sample * effectiveScale)
+                        .coerceIn(-30000f, 30000f)
                         .toInt()
 
                     sourceData[i] = (boosted and 0xFF).toByte()
