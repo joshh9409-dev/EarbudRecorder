@@ -166,12 +166,12 @@ class MainActivity : Activity() {
         root.addView(label("ECHOLINK", 29f, 0xFFE7E5EE.toInt()).apply {
             gravity = Gravity.CENTER
             letterSpacing = 0.03f
-        }, lp(-1, 44))
+        }, lp(-1, 52))
 
         root.addView(label("BLUETOOTH EAR BUD RECORDER", 11f, 0xFFA985C8.toInt()).apply {
             gravity = Gravity.CENTER
             letterSpacing = 0.08f
-        }, lp(-1, 24))
+        }, lp(-1, 32))
 
         val status = TextView(this).apply {
             tag = "main_status"
@@ -338,7 +338,7 @@ class MainActivity : Activity() {
             typeface = Typeface.DEFAULT_BOLD
         }, LinearLayout.LayoutParams(0, dp(48), 1f))
         root.addView(header)
-        root.addView(label("Saved recordings • newest first", 11.5f, 0xFF8D7CA0.toInt()), lp(-1, 28))
+        root.addView(label("Saved recordings • newest first", 11.5f, 0xFF8D7CA0.toInt()), lp(-1, 34))
 
         val search = EditText(this).apply {
             hint = "Search recordings"
@@ -353,7 +353,7 @@ class MainActivity : Activity() {
                 setStroke(dp(1), 0xFF30283C.toInt())
             }
         }
-        root.addView(search, lp(-1, 46))
+        root.addView(search, lp(-1, 52))
 
         val scroll = ScrollView(this).apply {
             overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
@@ -475,14 +475,14 @@ class MainActivity : Activity() {
             addView(label("ECHOLINK", 27f, 0xFFE7E5EE.toInt()).apply {
                 gravity = Gravity.CENTER
                 letterSpacing = 0.03f
-            }, lp(-1, 40))
+            }, lp(-1, 52))
             addView(label(title, 12f, 0xFFA985C8.toInt()).apply {
                 gravity = Gravity.CENTER
                 letterSpacing = 0.08f
-            }, lp(-1, 26))
+            }, lp(-1, 34))
             addView(label(subtitle, 10.5f, 0xFF756B82.toInt()).apply {
                 gravity = Gravity.CENTER
-            }, lp(-1, 26))
+            }, lp(-1, 34))
         }
     }
 
@@ -492,13 +492,16 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(4), 0, dp(4), 0)
         }
-        row.addView(label(title, 12f, Color.WHITE), LinearLayout.LayoutParams(0, dp(44), 1f))
+        row.addView(label(title, 12f, Color.WHITE).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            includeFontPadding = false
+        }, LinearLayout.LayoutParams(0, dp(50), 1f))
         row.addView(label(value, 11f, 0xFFA98DC0.toInt()).apply {
             gravity = Gravity.END
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
-        }, LinearLayout.LayoutParams(0, dp(44), 1f))
-        card.addView(row, lp(-1, 46))
+        }, LinearLayout.LayoutParams(0, dp(50), 1f))
+        card.addView(row, lp(-1, 52))
     }
 
     private fun addBottomNav(root: LinearLayout, selected: Int) {
@@ -1291,7 +1294,8 @@ class MainActivity : Activity() {
         text = t
         textSize = s
         setTextColor(c)
-        includeFontPadding = true
+        includeFontPadding = false
+        gravity = Gravity.CENTER_VERTICAL
     }
 
     private fun panel() = LinearLayout(this).apply {
