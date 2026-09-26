@@ -144,8 +144,7 @@ class MainActivity : Activity() {
         root.addView(timerText,lp(-1,-2))
 
         recordButton=TextView(this).apply {
-            text="MIC
-REC"; textSize=17f; gravity=Gravity.CENTER; typeface=Typeface.DEFAULT_BOLD
+            text="MIC\nREC"; textSize=17f; gravity=Gravity.CENTER; typeface=Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE); background=recordButtonBackground(false)
             setCompoundDrawablesWithIntrinsicBounds(0,android.R.drawable.ic_btn_speak_now,0,0)
             compoundDrawablePadding=dp(4); isClickable=true; isFocusable=true
