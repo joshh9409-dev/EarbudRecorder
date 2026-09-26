@@ -421,6 +421,46 @@ class MainActivity : Activity() {
 
         card.addView(adjustments, lp(-1, -2))
 
+
+        var rate = 1f
+
+        seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser && activeFile == file) player?.seekTo(progress)
+                if (fromUser && activeFile != file) {
+                    position.text = formatMillis(progress.toLong()) + " / " + duration(file)
+                }
+            }
+            override fun onStartTrackingTouch(s: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) {}
+        })
+
+        play.setOnClickListener {
+            if (activeFile == file && player != null) releasePlayer()
+            else startPlayback(file, play, seek, position, rate, PlaybackMode.NORMAL)
+        }
+        back.setOnClickListener {
+            if (activeFile == file) player?.seekTo((player?.currentPosition ?: 0) - 10000)
+        }
+        fwd.setOnClickListener {
+            if (activeFile == file) {
+                val p = player ?: return@setOnClickListener
+                p.seekTo((p.currentPosition + 10000).coerceAtMost(p.duration.coerceAtLeast(0)))
+            }
+        }
+        speed.setOnClickListener {
+            rate = when (rate) {
+                1f -> 1.25f
+                1.25f -> 1.5f
+                1.5f -> 2f
+                else -> 1f
+            }
+            speed.text = String.format(Locale.UK, "%.2g×", rate)
+            if (activeFile == file) {
+                try { player?.setPlaybackParams(PlaybackParams().setSpeed(rate).setPitch(1f)) } catch (_: Exception) {}
+            }
+        }
+
         export.setOnClickListener {
             exportFile = file
             val i = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
@@ -940,4 +980,14 @@ class MainActivity : Activity() {
             }
         }
     }
-}
+}        val deleteButton = smallButton("DELETE").apply { minHeight = dp(40) }
+        playbackRow.addView(deleteButton, LinearLayout.LayoutParams(dp(76), dp(42)).apply {
+            setMargins(dp(2), 0, dp(2), 0)
+        })
+        deleteButton.setOnClickListener {
+            if (activeFile == file) releasePlayer()
+            if (file.delete()) refreshLibrary()
+            else Toast.makeText(this, "Could not delete recording", Toast.LENGTH_SHORT).show()
+        }
+
+
