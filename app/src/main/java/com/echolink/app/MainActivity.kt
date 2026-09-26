@@ -165,12 +165,12 @@ class MainActivity : Activity() {
         root.addView(label("ECHOLINK", 29f, 0xFFE7E5EE.toInt()).apply {
             gravity = Gravity.CENTER
             letterSpacing = 0.03f
-        }, lp(-1, 52))
+        }, lp(-1, 62))
 
         root.addView(label("BLUETOOTH EAR BUD RECORDER", 11f, 0xFFA985C8.toInt()).apply {
             gravity = Gravity.CENTER
             letterSpacing = 0.08f
-        }, lp(-1, 32))
+        }, lp(-1, 38))
 
         val status = TextView(this).apply {
             tag = "main_status"
@@ -186,7 +186,7 @@ class MainActivity : Activity() {
             isSingleLine = true
             ellipsize = android.text.TextUtils.TruncateAt.END
         }
-        root.addView(status, lp(-1, 42))
+        root.addView(status, lp(-1, 46))
 
         val scroll = ScrollView(this).apply {
             clipToPadding = false
@@ -195,20 +195,20 @@ class MainActivity : Activity() {
         val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
         liveWave = LiveWaveformView(this)
-        content.addView(liveWave, lp(-1, 104))
+        content.addView(liveWave, lp(-1, 92))
 
         timerText = label("00:00", 48f, Color.WHITE).apply {
             gravity = Gravity.CENTER
             typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
             includeFontPadding = false
         }
-        content.addView(timerText, lp(-1, 58))
+        content.addView(timerText, lp(-1, 74))
 
         recordOrb = RecordOrbView(this).apply {
             isClickable = true
             setOnClickListener { toggleRecording() }
         }
-        content.addView(recordOrb, LinearLayout.LayoutParams(-1, dp(190)))
+        content.addView(recordOrb, LinearLayout.LayoutParams(-1, dp(250)))
 
         timerCaption = label("3D RECORD ORB • READY", 15f, 0xFFA985C8.toInt()).apply {
             gravity = Gravity.CENTER
@@ -219,7 +219,7 @@ class MainActivity : Activity() {
         content.addView(label(
             "No captured audio is played live.",
             10.5f, 0xFF687080.toInt()
-        ).apply { gravity = Gravity.CENTER }, lp(-1, 24))
+        ).apply { gravity = Gravity.CENTER }, lp(-1, 32))
 
         scroll.addView(content, LinearLayout.LayoutParams(-1, -2))
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -966,7 +966,7 @@ class MainActivity : Activity() {
         text = t
         textSize = s
         setTextColor(c)
-        includeFontPadding = false
+        includeFontPadding = true
         gravity = Gravity.CENTER_VERTICAL
     }
 
@@ -1055,9 +1055,14 @@ class MainActivity : Activity() {
             set(value) { field = value.coerceIn(0f, 1f); invalidate() }
 
         private var phase = 0f
+        private var displayedLevel = 0f
+
         private val tick = object : Runnable {
             override fun run() {
                 phase += if (isRecording) 0.075f else 0.025f
+                // Smooth the microphone level so the orb expands/contracts
+                // naturally instead of jumping with every meter sample.
+                displayedLevel += (level - displayedLevel) * 0.18f
                 invalidate()
                 postDelayed(this, 32L)
             }
@@ -1076,55 +1081,129 @@ class MainActivity : Activity() {
         }
 
         override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+
             val cx = width / 2f
-            val cy = height * .52f
-            val base = minOf(width, height) * .30f
-            val wave = (kotlin.math.sin(phase.toDouble()).toFloat() + 1f) * .5f
+            val cy = height * .50f
+            if (width <= 0 || height <= 0) return
+
+            val pulse = displayedLevel
+            val idleBreath = (kotlin.math.sin(phase.toDouble()).toFloat() + 1f) * .5f
+            // Compact enough to stay completely inside the view, but large
+            // enough to show a very obvious sound-reactive size change.
+            val base = (minOf(width, height) * (.21f + pulse * .10f + idleBreath * .006f))
+                .coerceAtMost(height * .31f)
+
             val accent = if (isRecording) 0xFFFF63C7.toInt() else 0xFFA96BFF.toInt()
             val cyan = 0xFF48E5FF.toInt()
 
+            // Soft floor shadow gives the orb depth without relying on a
+            // hardware shadow layer.
+            val shadow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                shader = RadialGradient(
+                    cx, cy + base * 1.05f, base * 1.35f,
+                    intArrayOf(0xAA000000.toInt(), 0x55000000, 0x00000000),
+                    floatArrayOf(0f, .45f, 1f),
+                    Shader.TileMode.CLAMP
+                )
+            }
+            canvas.drawOval(
+                RectF(cx - base * 1.0f, cy + base * .72f,
+                    cx + base * 1.0f, cy + base * 1.10f),
+                shadow
+            )
+
+            // Layered energy rings expand with the incoming sound level.
             val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
             for (i in 0..7) {
                 ring.strokeWidth = if (i == 0) 5f else 2f
                 ring.color = if (i % 2 == 0) accent else cyan
-                ring.alpha = (190 - i * 20).coerceAtLeast(35)
-                val r = base * (1.05f + i * .055f) + wave * 3f
-                canvas.drawCircle(cx, cy + 5f, r, ring)
+                ring.alpha = (205 - i * 21).coerceAtLeast(30)
+                val r = base * (1.12f + i * .055f) + pulse * 7f
+                canvas.drawCircle(cx, cy, r, ring)
             }
 
-            val glow = Paint(Paint.ANTI_ALIAS_FLAG)
-            glow.shader = RadialGradient(cx, cy, base * 1.45f,
-                intArrayOf(0xFF6B3A74.toInt(), accent, 0xFF17101F.toInt(), 0x00000000),
-                floatArrayOf(0f, .35f, .72f, 1f), Shader.TileMode.CLAMP)
-            canvas.drawCircle(cx, cy, base * 1.45f, glow)
-
-            val body = Paint(Paint.ANTI_ALIAS_FLAG)
-            body.shader = RadialGradient(cx - base * .28f, cy - base * .4f, base * 1.3f,
-                intArrayOf(0xFF9B99A5.toInt(), 0xFF302D3A.toInt(), 0xFF07070B.toInt()),
-                floatArrayOf(0f, .36f, 1f), Shader.TileMode.CLAMP)
+            // Main spherical body. Multiple gradients create a glossy 3D
+            // volume rather than a flat circle.
+            val body = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                shader = RadialGradient(
+                    cx - base * .30f, cy - base * .38f, base * 1.35f,
+                    intArrayOf(
+                        0xFFF3F0FF.toInt(),
+                        0xFF8E789F.toInt(),
+                        0xFF35273F.toInt(),
+                        0xFF08070C.toInt()
+                    ),
+                    floatArrayOf(0f, .22f, .58f, 1f),
+                    Shader.TileMode.CLAMP
+                )
+            }
             canvas.drawCircle(cx, cy, base, body)
 
-            val floor = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                style = Paint.Style.STROKE
-                strokeWidth = base * .16f
-                color = accent
-                alpha = 225
+            // Coloured inner glow follows the sound level.
+            val glowAlpha = (70 + pulse * 115f).toInt().coerceIn(70, 185)
+            val innerGlow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                shader = RadialGradient(
+                    cx + base * .12f, cy + base * .12f, base,
+                    intArrayOf(
+                        (glowAlpha shl 24) or (accent and 0x00FFFFFF),
+                        0x00101018
+                    ),
+                    floatArrayOf(0f, 1f),
+                    Shader.TileMode.CLAMP
+                )
             }
-            canvas.drawArc(RectF(cx - base * 1.25f, cy + base * .15f,
-                cx + base * 1.25f, cy + base * .78f), 195f, 150f, false, floor)
+            canvas.drawCircle(cx, cy, base * .98f, innerGlow)
 
+            // Gloss highlight.
+            val highlight = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                shader = RadialGradient(
+                    cx - base * .36f, cy - base * .42f, base * .55f,
+                    intArrayOf(0xDDF9F6FF.toInt(), 0x55FFFFFF, 0x00FFFFFF),
+                    floatArrayOf(0f, .25f, 1f),
+                    Shader.TileMode.CLAMP
+                )
+            }
+            canvas.drawCircle(cx - base * .20f, cy - base * .18f, base * .40f, highlight)
+
+            // Curved lower reflection makes the sphere read as 3D.
+            val reflection = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = base * .10f
+                strokeCap = Paint.Cap.ROUND
+                color = accent
+                alpha = 190
+            }
+            canvas.drawArc(
+                RectF(cx - base * 1.12f, cy + base * .02f,
+                    cx + base * 1.12f, cy + base * 1.15f),
+                18f, 145f, false, reflection
+            )
+
+            // Microphone icon remains centred inside the sphere.
             val mic = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = if (connectionReady) 0xFFD7B8FF.toInt() else 0xFF756A80.toInt()
+                color = if (connectionReady) 0xFFF1DFFF.toInt() else 0xFF756A80.toInt()
                 style = Paint.Style.STROKE
                 strokeWidth = base * .105f
                 strokeCap = Paint.Cap.ROUND
             }
             val mr = base * .27f
-            canvas.drawRoundRect(RectF(cx - mr, cy - mr * 1.35f, cx + mr, cy + mr * .55f), mr, mr, mic)
-            canvas.drawArc(RectF(cx - mr * 1.45f, cy - mr * .2f, cx + mr * 1.45f, cy + mr * 1.65f), 0f, 180f, false, mic)
+            canvas.drawRoundRect(
+                RectF(cx - mr, cy - mr * 1.35f, cx + mr, cy + mr * .55f),
+                mr, mr, mic
+            )
+            canvas.drawArc(
+                RectF(cx - mr * 1.45f, cy - mr * .2f,
+                    cx + mr * 1.45f, cy + mr * 1.65f),
+                0f, 180f, false, mic
+            )
             canvas.drawLine(cx, cy + mr * 1.65f, cx, cy + mr * 2.15f, mic)
-            canvas.drawLine(cx - mr * .75f, cy + mr * 2.15f, cx + mr * .75f, cy + mr * 2.15f, mic)
+            canvas.drawLine(
+                cx - mr * .75f, cy + mr * 2.15f,
+                cx + mr * .75f, cy + mr * 2.15f, mic
+            )
 
+            // Sound bars now respond to the same smoothed level.
             if (isRecording) {
                 val bars = 17
                 val barsPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -1134,9 +1213,15 @@ class MainActivity : Activity() {
                 }
                 for (i in 0 until bars) {
                     val a = (i - bars / 2f) / (bars / 2f)
-                    val h = base * .28f * (1f - kotlin.math.abs(a)) * (0.35f + level * 1.4f)
+                    val h = base * .24f *
+                        (1f - kotlin.math.abs(a)) *
+                        (0.30f + pulse * 1.55f)
                     val x = cx + a * base * 1.05f
-                    canvas.drawLine(x, cy + base * .95f, x, cy + base * .95f - h, barsPaint)
+                    canvas.drawLine(
+                        x, cy + base * .94f,
+                        x, cy + base * .94f - h,
+                        barsPaint
+                    )
                 }
             }
         }
