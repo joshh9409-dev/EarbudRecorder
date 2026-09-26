@@ -403,16 +403,18 @@ class MainActivity : Activity() {
 
         val wave = WaveformView(this)
         wave.load(file)
-        card.addView(wave, lp(-1, 64))
+        card.addView(wave, compactLp(-1, 58))
 
-        val position = label("00:00 / " + duration(file), 10.5f, 0xFF8195A8.toInt())
-        card.addView(position, lp(-1, -2))
+        val position = label("00:00 / " + duration(file), 10.5f, 0xFF8195A8.toInt()).apply {
+            setPadding(0, dp(3), 0, 0)
+        }
+        card.addView(position, compactLp(-1, 28))
 
         val seek = SeekBar(this).apply {
-            max = durationMillis(file).coerceAtLeast(1).toInt()
+            max = durationMillis(file).coerceAtLeast(1).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
             progress = 0
         }
-        card.addView(seek, lp(-1, 46))
+        card.addView(seek, compactLp(-1, 40))
 
         val row1 = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -753,7 +755,11 @@ class MainActivity : Activity() {
         setMargins(0, dp(4), 0, dp(4))
     }
 
-    private fun controlRowLp() = LinearLayout.LayoutParams(-1, dp(52)).apply {
+    private fun compactLp(w: Int, h: Int) = LinearLayout.LayoutParams(w, dp(h)).apply {
+        setMargins(0, dp(2), 0, dp(2))
+    }
+
+    private fun controlRowLp() = LinearLayout.LayoutParams(-1, dp(50)).apply {
         setMargins(0, dp(2), 0, dp(2))
     }
 
@@ -831,10 +837,15 @@ class MainActivity : Activity() {
                 c.drawLine(0f, mid, width.toFloat(), mid, paint)
                 return
             }
+
+            val maxLevel = levels.maxOrNull()?.coerceAtLeast(0.0001f) ?: 0.0001f
             val step = width / levels.size.toFloat()
-            levels.forEachIndexed { i, v ->
-                val h = (v * height * .85f).coerceAtLeast(2f)
-                c.drawLine(i * step, mid - h / 2f, i * step, mid + h / 2f, paint)
+
+            levels.forEachIndexed { i, raw ->
+                val normalized = (raw / maxLevel).coerceIn(0f, 1f)
+                val h = (normalized * height * .78f).coerceAtLeast(3f)
+                val x = i * step + step / 2f
+                c.drawLine(x, mid - h / 2f, x, mid + h / 2f, paint)
             }
         }
     }
