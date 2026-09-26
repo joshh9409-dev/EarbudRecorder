@@ -509,8 +509,12 @@ class MainActivity : Activity() {
     }
     private fun createProcessedFile(source: File, mode: PlaybackMode): File {
         val dir = File(cacheDir, "processed").apply { mkdirs() }
-        val suffix = if (mode == PlaybackMode.BOOST) "_boost_v4" else "_clear_v4"
-        val target = File(dir, source.nameWithoutExtension + suffix + ".wav")
+        val target = File(
+            dir,
+            source.nameWithoutExtension +
+                if (mode == PlaybackMode.BOOST) "_boost_v4" else "_clear_v4" +
+                ".wav"
+        )
 
         RandomAccessFile(source, "r").use { input ->
             val size = (input.length() - 44L).coerceAtLeast(0L)
