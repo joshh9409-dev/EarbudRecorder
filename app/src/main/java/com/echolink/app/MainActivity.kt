@@ -507,19 +507,64 @@ class MainActivity : Activity() {
     private fun restartProcessedPlayback(file:File,playButton:TextView,seek:SeekBar,position:TextView,rate:Float,mode:PlaybackMode){
         releasePlayer(); startPlayback(file,playButton,seek,position,rate,mode)
     }
-    private fun createProcessedFile(source:File,mode:PlaybackMode):File{
-        val dir=File(cacheDir,"processed").apply{mkdirs()}
-        val target=File(dir,source.nameWithoutExtension+(if(mode==PlaybackMode.BOOST)"_boost" else "_clear")+".wav")
-        if(target.exists()&&target.lastModified()>=source.lastModified())return target
-        RandomAccessFile(source,"r").use{input->val size=(input.length()-44L).coerceAtLeast(0L);RandomAccessFile(target,"rw").use{out->
-            out.setLength(0); writeWavHeader(out,size); input.seek(44); val b=ByteArray(8192); var prev=0f; var rem=size
-            while(rem>0){val n=input.read(b,0,minOf(b.size.toLong(),rem).toInt());if(n<=0)break;var i=0
-                while(i+1<n){val raw=(b[i].toInt() and 255) or (b[i+1].toInt() shl 8);val sample=if(raw and 0x8000!=0)raw-65536 else raw;var x=sample/32768f
-                    if(mode==PlaybackMode.CLEAR){val hp=x-prev*0.995f;prev=x;x=hp}else{x=kotlin.math.tanh(x*1.8f)/kotlin.math.tanh(1.8f)}
-                    val v=(x*32767f).toInt().coerceIn(-32768,32767);b[i]=(v and 255).toByte();b[i+1]=(v shr 8).toByte();i+=2}
-                out.write(b,0,n);rem-=n}
-        }};return target
+    private fun createProcessedFile(source: File, mode: PlaybackMode): File {
+        val dir = File(cacheDir, "processed").apply { mkdirs() }
+        // Versioned cache names ensure older, overly aggressive processing is never reused.
+        val suffix = if (mode == PlaybackMode.BOOST) "_boost_v2" else "_clear_v2"
+        val target = File(dir, source.nameWithoutExtension + suffix + ".wav")
+
+        RandomAccessFile(source, "r").use { input ->
+            val size = (input.length() - 44L).coerceAtLeast(0L)
+            RandomAccessFile(target, "rw").use { out ->
+                out.setLength(0)
+                writeWavHeader(out, size)
+                input.seek(44)
+
+                val buffer = ByteArray(8192)
+                var previous = 0f
+                var lowPass = 0f
+                var remaining = size
+
+                while (remaining > 0L) {
+                    val n = input.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
+                    if (n <= 0) break
+
+                    var i = 0
+                    while (i + 1 < n) {
+                        val raw = (buffer[i].toInt() and 255) or (buffer[i + 1].toInt() shl 8)
+                        val sample = if (raw and 0x8000 != 0) raw - 65536 else raw
+                        val x = sample / 32768f
+
+                        val processed = if (mode == PlaybackMode.BOOST) {
+                            // Gentle speech gain. Keep headroom and use a soft knee instead
+                            // of hard clipping, which can make boosted audio sound harsh.
+                            val gain = 1.45f
+                            kotlin.math.tanh(x * gain * 1.15f) / kotlin.math.tanh(1.15f)
+                        } else {
+                            // "CLEAR" is a speech-cleanup mode, not a treble booster.
+                            // Use a gentle high-pass plus low-pass band to remove rumble
+                            // and very-high-frequency hiss without the old differentiator
+                            // that turned background noise into a broadband screech.
+                            val highPassed = x - previous * 0.985f
+                            previous = x
+                            lowPass += 0.22f * (highPassed - lowPass)
+                            (lowPass * 1.10f).coerceIn(-1f, 1f)
+                        }
+
+                        val v = (processed * 32767f).toInt().coerceIn(-32768, 32767)
+                        buffer[i] = (v and 255).toByte()
+                        buffer[i + 1] = (v shr 8).toByte()
+                        i += 2
+                    }
+
+                    out.write(buffer, 0, n)
+                    remaining -= n.toLong()
+                }
+            }
+        }
+        return target
     }
+
     private fun writeWavHeader(r:RandomAccessFile,size:Long){
         val safeSize = size.coerceAtLeast(0L).coerceAtMost(0x7FFFFFFFL)
         r.writeBytes("RIFF")
