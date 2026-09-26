@@ -168,18 +168,12 @@ class MainActivity : Activity() {
         val mic = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         val free = recordingsDir().usableSpace
         val freeText = if (free < 1024L*1024L) "${free/1024} KB" else "${free/1024/1024} MB"
-        statusText.text = "BLUETOOTH       ${if(enabled) "ONLINE" else "OFF"}
-" +
-            "EARBUD MIC      ${input ?: "NOT DETECTED"}
-" +
-            "RECORD AUDIO    ${if(mic) "GRANTED" else "NEEDED"}
-" +
-            "STORAGE         $freeText FREE
-" +
-            "ROUTING         ${if(input!=null) "BLUETOOTH INPUT" else "WAITING FOR EARBUD"}
-" +
-            "READY           ${if(enabled && mic && input!=null) "EARBUD MICROPHONE READY" else "CONNECT EARBUD WITH MIC"}"
-        recordButton.isEnabled = recording || (enabled && mic && input != null)
+        statusText.text = "BLUETOOTH       ${if(enabled) "ONLINE" else "OFF"}\n" +
+            "EARBUD MIC      ${input ?: "NOT DETECTED"}\n" +
+            "RECORD AUDIO    ${if(mic) "GRANTED" else "NEEDED"}\n" +
+            "STORAGE         $freeText FREE\n" +
+            "ROUTING         ${if(input!=null) "BLUETOOTH INPUT" else "WAITING FOR EARBUD"}\n" +
+            "READY           ${if(enabled && mic && input!=null) "EARBUD MICROPHONE READY" else "CONNECT EARBUD WITH MIC"}"\n        recordButton.isEnabled = recording || (enabled && mic && input != null)
         recordButton.alpha = if(recordButton.isEnabled) 1f else .45f
     }
 
