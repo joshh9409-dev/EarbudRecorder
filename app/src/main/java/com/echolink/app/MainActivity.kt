@@ -359,7 +359,7 @@ class MainActivity : Activity() {
         seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser && activeFile == file && player != null) {
-                    player?.seekTo(progress.toLong())
+                    player?.seekTo(progress.coerceAtLeast(0))
                 }
                 if (fromUser && activeFile != file) position.text = formatMillis(progress.toLong()) + " / " + duration(file)
             }
@@ -376,12 +376,15 @@ class MainActivity : Activity() {
         }
 
         back.setOnClickListener {
-            if (activeFile == file) player?.seekTo((player?.currentPosition?.minus(10000L) ?: 0L).coerceAtLeast(0L))
+            if (activeFile == file) {
+                val p = player
+                if (p != null) p.seekTo((p.currentPosition - 10000).coerceAtLeast(0))
+            }
         }
         fwd.setOnClickListener {
             if (activeFile == file) {
                 val p = player
-                if (p != null) p.seekTo((p.currentPosition + 10000L).coerceAtMost(p.duration.coerceAtLeast(0L)))
+                if (p != null) p.seekTo((p.currentPosition + 10000).coerceAtMost(p.duration.coerceAtLeast(0)))
             }
         }
         speed.setOnClickListener {
@@ -392,7 +395,15 @@ class MainActivity : Activity() {
                 else -> 1f
             }
             speed.text = String.format(Locale.UK, "%.2g×", rate)
-            if (activeFile == file) player?.setPlaybackSpeed(rate)
+            if (activeFile == file) {
+                try {
+                    player?.setPlaybackParams(
+                        PlaybackParams()
+                            .setSpeed(rate.coerceIn(0.5f, 2f))
+                            .setPitch(1f)
+                    )
+                } catch (_: Exception) {}
+            }
         }
         normal.setOnClickListener { playbackMode=PlaybackMode.NORMAL; boost.text="BOOST"; clear.text="CLEAR"; if(activeFile==file) restartProcessedPlayback(file,play,seek,position,rate,playbackMode) }
         boost.setOnClickListener { playbackMode=PlaybackMode.BOOST; boost.text="BOOST ✓"; clear.text="CLEAR"; if(activeFile==file) restartProcessedPlayback(file,play,seek,position,rate,playbackMode) else startPlayback(file,play,seek,position,rate,playbackMode) }
