@@ -152,34 +152,45 @@ class MainActivity : Activity() {
                 setStroke(dp(1), 0xFF3A2851.toInt())
             }
             isSingleLine = true
+            ellipsize = android.text.TextUtils.TruncateAt.END
         }
         root.addView(status, lp(-1, 42))
 
-        liveWave = LiveWaveformView(this)
-        root.addView(liveWave, lp(-1, 118))
+        val scroll = ScrollView(this).apply {
+            clipToPadding = false
+            setPadding(0, 0, 0, dp(4))
+        }
+        val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
-        timerText = label("00:00", 52f, Color.WHITE).apply {
+        liveWave = LiveWaveformView(this)
+        content.addView(liveWave, lp(-1, 104))
+
+        timerText = label("00:00", 48f, Color.WHITE).apply {
             gravity = Gravity.CENTER
             typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
             includeFontPadding = false
         }
-        root.addView(timerText, lp(-1, 62))
+        content.addView(timerText, lp(-1, 58))
 
         recordOrb = RecordOrbView(this).apply {
             isClickable = true
             setOnClickListener { toggleRecording() }
         }
-        root.addView(recordOrb, LinearLayout.LayoutParams(-1, dp(210)))
+        content.addView(recordOrb, LinearLayout.LayoutParams(-1, dp(190)))
 
         timerCaption = label("3D RECORD ORB • READY", 15f, 0xFFA985C8.toInt()).apply {
             gravity = Gravity.CENTER
             letterSpacing = 0.05f
         }
-        root.addView(timerCaption, lp(-1, 34))
+        content.addView(timerCaption, lp(-1, 34))
 
-        root.addView(label("No captured audio is played live.", 10.5f, 0xFF687080.toInt()).apply {
-            gravity = Gravity.CENTER
-        }, lp(-1, 24))
+        content.addView(label(
+            "No captured audio is played live.",
+            10.5f, 0xFF687080.toInt()
+        ).apply { gravity = Gravity.CENTER }, lp(-1, 24))
+
+        scroll.addView(content, LinearLayout.LayoutParams(-1, -2))
+        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
         val nav = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -497,14 +508,14 @@ class MainActivity : Activity() {
     }
 
     private fun addRecordingCard(file: File) {
-        val card = panel().apply {
-            clipChildren = false
-            clipToPadding = false
-        }
+        val card = panel()
 
         card.addView(label(humanFileTitle(file), 15f, Color.WHITE).apply {
             typeface = Typeface.DEFAULT_BOLD
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
         }, lp(-1, -2))
+
         card.addView(label(
             formatSize(file.length()) + "  •  " + duration(file) + "  •  WAV PCM",
             11.5f, 0xFF8EA4B8.toInt()
@@ -526,138 +537,35 @@ class MainActivity : Activity() {
         }
         card.addView(seek, compactLp(-1, 40))
 
-        val row1 = LinearLayout(this).apply {
+        val transport = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            clipChildren = false
-            clipToPadding = false
         }
         val play = smallButton("PLAY")
         val back = smallButton("−10s")
         val fwd = smallButton("+10s")
         val speed = smallButton("1×")
-        listOf(play, back, fwd, speed).forEach { row1.addView(it, rowButtonLp()) }
-        card.addView(row1, controlRowLp())
+        listOf(play, back, fwd, speed).forEach { transport.addView(it, rowButtonLp()) }
+        card.addView(transport, controlRowLp())
 
-        val settings = AudioSettings()
-        val adjustments = panel().apply {
-            setPadding(dp(10), dp(10), dp(10), dp(10))
-        }
-        adjustments.addView(label("AUDIO ADJUSTMENTS", 12f, 0xFFB58CFF.toInt()), lp(-1, -2))
-
-        fun valueText(name: String, value: Int): String {
-            val db = (value - 100) * 12 / 100
-            return if (db == 0) name else name + "  " + (if (db > 0) "+" else "") + db + " dB"
-        }
-
-        val eqNames = listOf("Bass", "Mid", "Treble", "Presence", "Brilliance")
-        val eqSetters: List<(Int) -> Unit> = listOf(
-            { settings.bass = it },
-            { settings.mid = it },
-            { settings.treble = it },
-            { settings.presence = it },
-            { settings.brilliance = it }
-        )
-        val eqSliders = mutableListOf<SeekBar>()
-
-        eqNames.forEachIndexed { index, name ->
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(4), dp(1), dp(4), dp(1))
-            }
-
-            val caption = label("$name  0 dB", 12f, Color.WHITE).apply {
-                gravity = Gravity.CENTER_VERTICAL
-            }
-            row.addView(caption, LinearLayout.LayoutParams(dp(104), dp(46)))
-
-            val slider = SeekBar(this).apply {
-                max = 200
-                progress = 100
-                splitTrack = false
-                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                    override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                        eqSetters[index](p)
-                        val db = (p - 100) * 12 / 100
-                        caption.text = name + "  " + (if (db > 0) "+" else "") + db + " dB"
-                    }
-                    override fun onStartTrackingTouch(s: SeekBar?) {}
-                    override fun onStopTrackingTouch(s: SeekBar?) {}
-                })
-            }
-            eqSliders += slider
-            row.addView(slider, LinearLayout.LayoutParams(0, dp(46), 1f))
-            adjustments.addView(row, lp(-1, dp(50)))
-        }
-
-        val adjustmentSwitches = mutableListOf<Switch>()
-
-        fun switchRow(title: String, onChange: (Boolean) -> Unit) {
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(4), dp(2), dp(4), dp(2))
-            }
-            row.addView(label(title, 12f, Color.WHITE), LinearLayout.LayoutParams(0, dp(44), 1f))
-            val sw = Switch(this).apply {
-                isChecked = false
-                setOnCheckedChangeListener { _, checked -> onChange(checked) }
-            }
-            adjustmentSwitches += sw
-            row.addView(sw, LinearLayout.LayoutParams(dp(58), dp(44)))
-            adjustments.addView(row, lp(-1, dp(46)))
-        }
-
-        switchRow("Auto-Gain Control (AGC)") { settings.agc = it }
-        switchRow("Voice Isolation") { settings.voiceIsolation = it }
-
-        val noiseRow = LinearLayout(this).apply {
+        val actions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val noiseCaption = label("Noise Reduction  0%", 12f, Color.WHITE)
-        noiseRow.addView(noiseCaption, LinearLayout.LayoutParams(0, dp(64), 1f))
-        val noise = SeekBar(this).apply {
-            max = 100
-            progress = 0
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                    settings.noiseReduction = p
-                    noiseCaption.text = "Noise Reduction  " + p + "%"
-                }
-                override fun onStartTrackingTouch(s: SeekBar?) {}
-                override fun onStopTrackingTouch(s: SeekBar?) {}
+        val adjust = smallButton("ADJUST AUDIO")
+        val export = smallButton("EXPORT WAV")
+        val deleteButton = smallButton("DELETE")
+        listOf(adjust, export, deleteButton).forEach {
+            actions.addView(it, LinearLayout.LayoutParams(0, dp(46), 1f).apply {
+                setMargins(dp(2), 0, dp(2), 0)
             })
         }
-        noiseRow.addView(noise, LinearLayout.LayoutParams(dp(150), dp(54)))
-        adjustments.addView(noiseRow, lp(-1, dp(66)))
+        card.addView(actions, controlRowLp())
 
         var rate = 1f
-        val actionRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        val applyButton = smallButton("APPLY").apply { minHeight = dp(40) }
-        val resetButton = smallButton("RESET").apply { minHeight = dp(40) }
-        val speedAdjust = smallButton("1×").apply { minHeight = dp(40) }
-        actionRow.addView(applyButton, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(2),0,dp(2),0) })
-        actionRow.addView(resetButton, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(2),0,dp(2),0) })
-        actionRow.addView(speedAdjust, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(2),0,dp(2),0) })
-        adjustments.addView(actionRow, lp(-1, dp(50)))
+        var settings = AudioSettings()
 
-        val exportRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        val export = smallButton("EXPORT WAV").apply { minHeight = dp(40) }
-        val deleteButton = smallButton("DELETE").apply { minHeight = dp(40) }
-        exportRow.addView(export, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(2),0,dp(2),0) })
-        exportRow.addView(deleteButton, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(2),0,dp(2),0) })
-        adjustments.addView(exportRow, lp(-1, dp(50)))
-        card.addView(adjustments, lp(-1, -2))
-
-        fun applySettingsAndPlay() {
+        fun playWithCurrentSettings() {
             if (activeFile == file) releasePlayer()
             startPlayback(file, play, seek, position, rate, settings)
         }
@@ -675,40 +583,21 @@ class MainActivity : Activity() {
 
         play.setOnClickListener {
             if (activeFile == file && player != null) releasePlayer()
-            else startPlayback(file, play, seek, position, rate, settings)
-        }
-        applyButton.setOnClickListener { applySettingsAndPlay() }
-
-        resetButton.setOnClickListener {
-            settings.bass = 100
-            settings.mid = 100
-            settings.treble = 100
-            settings.presence = 100
-            settings.brilliance = 100
-            settings.agc = false
-            settings.voiceIsolation = false
-            settings.noiseReduction = 0
-
-            eqSliders.forEach { it.progress = 100 }
-            adjustmentSwitches.forEach { it.isChecked = false }
-            noise.progress = 0
-
-            if (activeFile == file) releasePlayer()
-            Toast.makeText(this, "Audio adjustments reset", Toast.LENGTH_SHORT).show()
+            else playWithCurrentSettings()
         }
 
         back.setOnClickListener {
             if (activeFile == file) {
-                val p = player ?: return@setOnClickListener
-                p.seekTo((p.currentPosition - 10000).coerceAtLeast(0))
+                player?.let { p -> p.seekTo((p.currentPosition - 10000).coerceAtLeast(0)) }
             }
         }
+
         fwd.setOnClickListener {
             if (activeFile == file) {
-                val p = player ?: return@setOnClickListener
-                p.seekTo((p.currentPosition + 10000).coerceAtMost(p.duration.coerceAtLeast(0)))
+                player?.let { p -> p.seekTo((p.currentPosition + 10000).coerceAtMost(p.duration.coerceAtLeast(0))) }
             }
         }
+
         speed.setOnClickListener {
             rate = when (rate) {
                 1f -> 1.25f
@@ -717,36 +606,23 @@ class MainActivity : Activity() {
                 else -> 1f
             }
             speed.text = String.format(Locale.UK, "%.2g×", rate)
-            speedAdjust.text = speed.text
-            if (activeFile == file) {
-                try { player?.setPlaybackParams(PlaybackParams().setSpeed(rate).setPitch(1f)) } catch (_: Exception) {}
-            }
-        }
-        speedAdjust.setOnClickListener {
-            rate = when (rate) {
-                1f -> 0.75f
-                0.75f -> 1.25f
-                1.25f -> 1.5f
-                1.5f -> 2f
-                else -> 1f
-            }
-            speed.text = String.format(Locale.UK, "%.2g×", rate)
-            speedAdjust.text = speed.text
             if (activeFile == file) {
                 try { player?.setPlaybackParams(PlaybackParams().setSpeed(rate).setPitch(1f)) } catch (_: Exception) {}
             }
         }
 
+        adjust.setOnClickListener {
+            showAdjustmentScreen(file, settings) { updated -> settings = updated }
+        }
+
         export.setOnClickListener {
-            exportFile = if (settings.changed()) {
-                createProcessedFile(file, settings)
-            } else file
-            val i = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            exportFile = if (settings.changed()) createProcessedFile(file, settings) else file
+            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
                 type = "audio/wav"
                 putExtra(Intent.EXTRA_TITLE, file.nameWithoutExtension + "_adjusted.wav")
             }
-            startActivityForResult(i, 400)
+            startActivityForResult(intent, 400)
         }
 
         deleteButton.setOnClickListener {
@@ -760,6 +636,230 @@ class MainActivity : Activity() {
         }
 
         libraryContainer.addView(card, lp(-1, -2))
+    }
+
+    private fun showAdjustmentScreen(
+        file: File,
+        initial: AudioSettings,
+        onApplied: (AudioSettings) -> Unit
+    ) {
+        val root = pageRoot()
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(smallButton("‹").apply {
+            textSize = 22f
+            setOnClickListener { showLibraryScreen() }
+        }, LinearLayout.LayoutParams(dp(48), dp(48)))
+        header.addView(label("AUDIO ADJUSTMENTS", 20f, Color.WHITE).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            typeface = Typeface.DEFAULT_BOLD
+        }, LinearLayout.LayoutParams(0, dp(48), 1f))
+        root.addView(header)
+        root.addView(label(humanFileTitle(file), 11.5f, 0xFF8D7CA0.toInt()).apply {
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }, lp(-1, 28))
+
+        val scroll = ScrollView(this).apply {
+            clipToPadding = false
+            setPadding(0, dp(2), 0, dp(6))
+        }
+        val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        scroll.addView(content, LinearLayout.LayoutParams(-1, -2))
+        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        var settings = initial.copy()
+        var rate = 1f
+
+        val playerControls = panel()
+        val position = label("00:00 / " + duration(file), 11f, 0xFF8195A8.toInt())
+        playerControls.addView(position, lp(-1, 28))
+        val seek = SeekBar(this).apply {
+            max = durationMillis(file).coerceAtLeast(1L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        }
+        playerControls.addView(seek, compactLp(-1, 40))
+
+        val transport = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val play = smallButton("PLAY")
+        val back = smallButton("−10s")
+        val fwd = smallButton("+10s")
+        val speed = smallButton("1×")
+        listOf(play, back, fwd, speed).forEach { transport.addView(it, rowButtonLp()) }
+        playerControls.addView(transport, controlRowLp())
+        content.addView(playerControls, lp(-1, -2))
+
+        val adjustmentPanel = panel().apply {
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+        }
+        adjustmentPanel.addView(label("EQUALIZER", 12f, 0xFFB58CFF.toInt()), lp(-1, 26))
+
+        val eqSliders = mutableListOf<SeekBar>()
+        val switches = mutableListOf<Switch>()
+        val eqNames = listOf("Bass", "Mid", "Presence", "Treble", "Brilliance")
+        val initialValues = listOf(settings.bass, settings.mid, settings.presence, settings.treble, settings.brilliance)
+        val eqSetters: List<(Int) -> Unit> = listOf(
+            { settings.bass = it },
+            { settings.mid = it },
+            { settings.presence = it },
+            { settings.treble = it },
+            { settings.brilliance = it }
+        )
+
+        fun dbText(name: String, p: Int): String {
+            val db = (p - 100) * 12 / 100
+            return name + "  " + (if (db > 0) "+" else "") + db + " dB"
+        }
+
+        eqNames.forEachIndexed { index, name ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            val caption = label(dbText(name, initialValues[index]), 11.5f, Color.WHITE)
+            row.addView(caption, LinearLayout.LayoutParams(dp(108), dp(48)))
+            val slider = SeekBar(this).apply {
+                max = 200
+                progress = initialValues[index]
+                splitTrack = false
+                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                        eqSetters[index](p)
+                        caption.text = dbText(name, p)
+                    }
+                    override fun onStartTrackingTouch(s: SeekBar?) {}
+                    override fun onStopTrackingTouch(s: SeekBar?) {}
+                })
+            }
+            eqSliders += slider
+            row.addView(slider, LinearLayout.LayoutParams(0, dp(48), 1f))
+            adjustmentPanel.addView(row, lp(-1, 52))
+        }
+
+        adjustmentPanel.addView(label("PROCESSING", 12f, 0xFFB58CFF.toInt()), lp(-1, 26))
+
+        fun addSwitch(title: String, checked: Boolean, setter: (Boolean) -> Unit) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            row.addView(label(title, 12f, Color.WHITE), LinearLayout.LayoutParams(0, dp(46), 1f))
+            val sw = Switch(this).apply {
+                isChecked = checked
+                setOnCheckedChangeListener { _, value -> setter(value) }
+            }
+            switches += sw
+            row.addView(sw, LinearLayout.LayoutParams(dp(58), dp(46)))
+            adjustmentPanel.addView(row, lp(-1, 48))
+        }
+
+        addSwitch("Auto-Gain Control", settings.agc) { settings.agc = it }
+        addSwitch("Voice Isolation", settings.voiceIsolation) { settings.voiceIsolation = it }
+
+        val noiseRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val noiseCaption = label("Noise Reduction  " + settings.noiseReduction + "%", 12f, Color.WHITE)
+        noiseRow.addView(noiseCaption, LinearLayout.LayoutParams(0, dp(48), 1f))
+        val noise = SeekBar(this).apply {
+            max = 100
+            progress = settings.noiseReduction
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                    settings.noiseReduction = p
+                    noiseCaption.text = "Noise Reduction  " + p + "%"
+                }
+                override fun onStartTrackingTouch(s: SeekBar?) {}
+                override fun onStopTrackingTouch(s: SeekBar?) {}
+            })
+        }
+        noiseRow.addView(noise, LinearLayout.LayoutParams(dp(160), dp(48)))
+        adjustmentPanel.addView(noiseRow, lp(-1, 52))
+
+        val buttons = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val apply = smallButton("APPLY & PLAY")
+        val reset = smallButton("RESET")
+        val export = smallButton("EXPORT WAV")
+        listOf(apply, reset, export).forEach {
+            buttons.addView(it, LinearLayout.LayoutParams(0, dp(46), 1f).apply {
+                setMargins(dp(2), 0, dp(2), 0)
+            })
+        }
+        adjustmentPanel.addView(buttons, lp(-1, 52))
+        content.addView(adjustmentPanel, lp(-1, -2))
+
+        seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                if (fromUser && activeFile == file) player?.seekTo(p)
+                if (fromUser && activeFile != file) position.text = formatMillis(p.toLong()) + " / " + duration(file)
+            }
+            override fun onStartTrackingTouch(s: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) {}
+        })
+
+        fun playCurrent() {
+            if (activeFile == file) releasePlayer()
+            startPlayback(file, play, seek, position, rate, settings)
+        }
+
+        play.setOnClickListener {
+            if (activeFile == file && player != null) releasePlayer() else playCurrent()
+        }
+        back.setOnClickListener {
+            if (activeFile == file) player?.let { p -> p.seekTo((p.currentPosition - 10000).coerceAtLeast(0)) }
+        }
+        fwd.setOnClickListener {
+            if (activeFile == file) player?.let { p -> p.seekTo((p.currentPosition + 10000).coerceAtMost(p.duration.coerceAtLeast(0))) }
+        }
+        speed.setOnClickListener {
+            rate = when (rate) {
+                1f -> 1.25f
+                1.25f -> 1.5f
+                1.5f -> 2f
+                else -> 1f
+            }
+            speed.text = String.format(Locale.UK, "%.2g×", rate)
+            if (activeFile == file) {
+                try { player?.setPlaybackParams(PlaybackParams().setSpeed(rate).setPitch(1f)) } catch (_: Exception) {}
+            }
+        }
+
+        reset.setOnClickListener {
+            settings = AudioSettings()
+            eqSliders.forEach { it.progress = 100 }
+            switches.forEach { it.isChecked = false }
+            noise.progress = 0
+            rate = 1f
+            speed.text = "1×"
+            if (activeFile == file) releasePlayer()
+            Toast.makeText(this, "All audio adjustments reset", Toast.LENGTH_SHORT).show()
+        }
+
+        apply.setOnClickListener {
+            onApplied(settings.copy())
+            playCurrent()
+        }
+
+        export.setOnClickListener {
+            exportFile = if (settings.changed()) createProcessedFile(file, settings) else file
+            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "audio/wav"
+                putExtra(Intent.EXTRA_TITLE, file.nameWithoutExtension + "_adjusted.wav")
+            }
+            startActivityForResult(intent, 400)
+        }
+
+        addBottomNav(root, 0)
+        setContentView(root)
     }
 
     private fun startPlayback(
