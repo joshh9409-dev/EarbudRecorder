@@ -32,6 +32,7 @@ class MainActivity : Activity() {
     private lateinit var timerCaption: TextView
     private lateinit var meter: ProgressBar
     private lateinit var liveWave: LiveWaveformView
+    private lateinit var savedRecordingsButton: TextView
     private lateinit var libraryContainer: LinearLayout
 
     private var recording = false
@@ -159,13 +160,11 @@ class MainActivity : Activity() {
             gravity=Gravity.CENTER_HORIZONTAL; setMargins(0,dp(6),0,dp(10))
         })
 
-        root.addView(label("INPUT MONITOR",11f,0xFF7890A5.toInt()).apply {
+        root.addView(label("LIVE MICROPHONE WAVEFORM",11f,0xFF7890A5.toInt()).apply {
             setPadding(dp(4),dp(2),dp(4),dp(4)); letterSpacing=0.12f
         },lp(-1,-2))
-        meter=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; progress=0 }
-        root.addView(meter,lp(-1,14))
         liveWave=LiveWaveformView(this)
-        root.addView(liveWave,lp(-1,48))
+        root.addView(liveWave,lp(-1,64))
         root.addView(label("No captured audio is played live.",11f,0xFF71849A.toInt()).apply {
             setPadding(dp(4),0,dp(4),dp(4))
         },lp(-1,-2))
@@ -178,14 +177,13 @@ class MainActivity : Activity() {
         ),lp(-1,-2))
         root.addView(behaviour,lp(-1,-2))
 
-        root.addView(label("RECORDING LIBRARY",19f,Color.WHITE).apply {
-            typeface=Typeface.DEFAULT_BOLD; setPadding(2,dp(10),2,dp(5))
-        },lp(-1,-2))
+        savedRecordingsButton=smallButton("VIEW SAVED RECORDINGS").apply {
+            textSize=12f
+            visibility=View.GONE
+            setOnClickListener { showLibraryScreen() }
+        }
+        root.addView(savedRecordingsButton,lp(-1,52))
 
-        val libraryScroll=ScrollView(this).apply { overScrollMode=View.OVER_SCROLL_IF_CONTENT_SCROLLS; clipToPadding=false }
-        libraryContainer=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
-        libraryScroll.addView(libraryContainer,LinearLayout.LayoutParams(-1,-2))
-        root.addView(libraryScroll,LinearLayout.LayoutParams(-1,0,1f))
         setContentView(root)
     }
 
@@ -252,12 +250,51 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun showLibraryScreen() {
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(18), dp(18), dp(18))
+            setBackgroundColor(Color.rgb(5, 8, 16))
+        }
+
+        val back = smallButton("‹  BACK TO RECORDER").apply {
+            textSize = 12f
+            setOnClickListener {
+                buildUi()
+                refreshStatus()
+                refreshLibrary()
+            }
+        }
+        root.addView(back, lp(-1, 52))
+        root.addView(label("SAVED RECORDINGS", 22f, Color.WHITE).apply {
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(2, dp(10), 2, dp(4))
+        }, lp(-1, -2))
+        root.addView(label("Your recordings are stored on this phone until you delete them.", 12f, 0xFF7D91A5.toInt()), lp(-1, -2))
+
+        val scroll = ScrollView(this).apply {
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            clipToPadding = false
+        }
+        libraryContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        scroll.addView(libraryContainer, LinearLayout.LayoutParams(-1, -2))
+        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        setContentView(root)
+        refreshLibrary()
+    }
+
     private fun refreshLibrary() {
-        if (!::libraryContainer.isInitialized) return
-        libraryContainer.removeAllViews()
         val files = recordingsDir().listFiles { f -> f.extension.equals("wav", true) }
             ?.sortedByDescending { it.lastModified() }
             .orEmpty()
+
+        if (::savedRecordingsButton.isInitialized) {
+            savedRecordingsButton.visibility = if (files.isEmpty()) View.GONE else View.VISIBLE
+            savedRecordingsButton.text = if (files.size == 1) "VIEW SAVED RECORDING" else "VIEW SAVED RECORDINGS (" + files.size + ")"
+        }
+
+        if (!::libraryContainer.isInitialized) return
+        libraryContainer.removeAllViews()
 
         if (files.isEmpty()) {
             libraryContainer.addView(label("No recordings yet. Start a Bluetooth recording and it will appear here.", 13f, 0xFF6E8295.toInt()))
