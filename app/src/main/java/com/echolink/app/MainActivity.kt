@@ -765,18 +765,11 @@ class MainActivity : Activity() {
                  * Then apply the selected boost. The final ceiling is kept
                  * slightly below full-scale to leave a little safety margin.
                  */
-                val normalization = 30000f / peak.toFloat()
-                val requested = normalization * safeBoost
-                val finalScale = if (peak.toFloat() * requested > 30000f) {
-                    30000f / peak.toFloat()
-                } else {
-                    requested
-                }
-
-                // For high boost settings, normalize first and then apply the
-                // requested gain while retaining the maximum possible peak.
-                // If the requested gain would clip, the whole waveform is
-                // scaled uniformly to the safe ceiling.
+                // Use a 25% full-scale reference at 100%, then let the
+                // slider raise that reference progressively. This gives the
+                // user real audible differences between 100% and 400%.
+                val referencePeak = 7500f
+                val requested = (referencePeak / peak.toFloat()) * safeBoost
                 val effectiveScale = minOf(requested, 30000f / peak.toFloat())
 
                 writeWavHeader(out, offset.toLong())
