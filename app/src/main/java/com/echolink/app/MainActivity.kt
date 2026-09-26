@@ -1034,8 +1034,14 @@ class MainActivity : Activity() {
                             brillianceBand * (gainDb(settings.brilliance) - 1.0)
 
                         if (settings.voiceIsolation) {
-                            y = y.coerceIn(-0.8, 0.8)
-                            y *= 1.12
+                            // Keep the speech-focused midrange while reducing rumble
+                            // and very high-frequency content. This is intentionally
+                            // different from AGC and EQ so the control has a clear job.
+                            y = bassBand * 0.12 +
+                                midBand * 1.18 +
+                                presenceBand * 1.25 +
+                                trebleBand * 0.38 +
+                                brillianceBand * 0.05
                         }
 
                         val absY = abs(y)
