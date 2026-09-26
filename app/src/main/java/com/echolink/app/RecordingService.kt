@@ -74,6 +74,7 @@ class RecordingService : Service() {
 
     private fun captureLoop(){
         var lastMeter=0
+        var storageFull=false
         while(running){
             if(recorder==null){
                 if(!tryCreateRecorder()){Thread.sleep(700);continue}
@@ -92,11 +93,12 @@ class RecordingService : Service() {
                         lastMeter=(peak/327.68f).toInt().coerceIn(0,100)
                         broadcast(lastMeter)
                     }
-                    if(output?.parentFile?.usableSpace ?: Long.MAX_VALUE < MIN_FREE){running=false;break}
+                    if(output?.parentFile?.usableSpace ?: Long.MAX_VALUE < MIN_FREE){storageFull=true;running=false;break}
                 }else if(n<0){releaseRecorder()}
             }catch(_:Exception){releaseRecorder()}
         }
         finishFile()
+        if(storageFull){ cleanupRouting(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
         broadcast(0)
     }
 
@@ -163,14 +165,19 @@ class RecordingService : Service() {
         handler.removeCallbacks(retry)
         releaseRecorder()
         finishFile()
+        cleanupRouting()
+        broadcast(0)
+        stopForeground(STOP_FOREGROUND_REMOVE);stopSelf()
+    }
+    
+    private fun cleanupRouting(){
         val audio=getSystemService(AudioManager::class.java)
-        if(Build.VERSION.SDK_INT>=31)try{communicationDevice?.let{headsetDevice?.let{d->headset?.stopVoiceRecognition(d)}};audio.clearCommunicationDevice()}catch(_:Exception){}
+        if(Build.VERSION.SDK_INT>=31)try{headsetDevice?.let{d->headset?.stopVoiceRecognition(d)};audio.clearCommunicationDevice()}catch(_:Exception){}
         if(bluetoothScoStarted)try{@Suppress("DEPRECATION") audio.isBluetoothScoOn=false;@Suppress("DEPRECATION") audio.stopBluetoothSco()}catch(_:Exception){}
         bluetoothScoStarted=false
         if(Build.VERSION.SDK_INT>=31)try{headset?.let{BluetoothAdapter.getDefaultAdapter()?.closeProfileProxy(BluetoothProfile.HEADSET,it)}}catch(_:Exception){}
         headset=null;headsetDevice=null;communicationDevice=null
-        broadcast(0)
-        stopForeground(STOP_FOREGROUND_REMOVE);stopSelf()
+        try{audio.mode=AudioManager.MODE_NORMAL}catch(_:Exception){}
     }
 
     private fun finishFile(){
@@ -181,7 +188,7 @@ class RecordingService : Service() {
     }
 
     private fun broadcast(meter:Int){
-        val elapsed=if(startedAt>0)(System.currentTimeMillis()-startedAt)/1000 else 0
+        val elapsed=if(dataBytes>0)dataBytes/(RATE*2L) else 0
         sendBroadcast(Intent(ACTION_STATE).setPackage(packageName).putExtra(EXTRA_RECORDING,running)
             .putExtra(EXTRA_TIMER,"%02d:%02d".format(Locale.UK,elapsed/60,elapsed%60)).putExtra(EXTRA_METER,meter))
     }

@@ -22,11 +22,13 @@ class MainActivity : Activity() {
     private lateinit var recordButton: TextView
     private lateinit var timerText: TextView
     private lateinit var meter: ProgressBar
+    private lateinit var liveWave: LiveWaveformView
     private lateinit var libraryContainer: LinearLayout
     private lateinit var sensitivityLabel: TextView
     private var recording = false
     private var pulse: ObjectAnimator? = null
     private var player: MediaPlayer? = null
+    private var exportFile: File? = null
     private val handler = Handler(Looper.getMainLooper())
     private val refresh = object : Runnable {
         override fun run() { refreshStatus(); if (!recording) refreshLibrary(); handler.postDelayed(this, 2500) }
@@ -37,6 +39,7 @@ class MainActivity : Activity() {
                 recording = intent.getBooleanExtra(RecordingService.EXTRA_RECORDING, false)
                 timerText.text = intent.getStringExtra(RecordingService.EXTRA_TIMER) ?: "00:00"
                 meter.progress = intent.getIntExtra(RecordingService.EXTRA_METER, 0)
+                    liveWave.setLevel(meter.progress / 100f)
                 updateRecordButton()
                 if (!recording) refreshLibrary()
             }
@@ -105,6 +108,8 @@ class MainActivity : Activity() {
         root.addView(label("LIVE INPUT LEVEL", 11f, 0xFF7890A5).apply { setPadding(4,16,4,5) })
         meter = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100 }
         root.addView(meter, lp(-1, 18))
+        liveWave = LiveWaveformView(this)
+        root.addView(liveWave, lp(-1, 58))
 
         root.addView(label("SENSITIVITY", 11f, 0xFF7890A5).apply { setPadding(4,16,4,0) })
         sensitivityLabel = label("Normal", 13f, 0xFFBDEBFF)
@@ -189,8 +194,8 @@ class MainActivity : Activity() {
         val wave=WaveformView(this); wave.load(file); card.addView(wave,lp(-1,62))
         val controls=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
         val play=smallButton("PLAY"); val back=smallButton("−10s"); val fwd=smallButton("+10s")
-        val speed=smallButton("1×"); val boost=smallButton("BOOST"); val del=smallButton("DELETE")
-        listOf(play,back,fwd,speed,boost,del).forEach{controls.addView(it,weightLp())}; card.addView(controls,lp(-1,48))
+        val speed=smallButton("1×"); val boost=smallButton("BOOST"); val export=smallButton("EXPORT"); val del=smallButton("DELETE")
+        listOf(play,back,fwd,speed,boost,export,del).forEach{controls.addView(it,weightLp())}; card.addView(controls,lp(-1,48))
         var rate=1f; var boosted=false
         play.setOnClickListener {
             if(player!=null){player?.release();player=null;play.text="PLAY"} else try {
@@ -210,11 +215,11 @@ class MainActivity : Activity() {
             if(Build.VERSION.SDK_INT>=23) player?.let { it.playbackParams = it.playbackParams.setSpeed(rate) }
         }
         boost.setOnClickListener{boosted=!boosted;boost.text=if(boosted)"BOOST ON" else "BOOST";player?.setVolume(if(boosted)1.5f else 1f,if(boosted)1.5f else 1f)}
-        del.setOnClickListener{player?.release();player=null;if(file.delete())refreshLibrary()}
+        export.setOnClickListener { exportFile=file; startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply { addCategory(Intent.CATEGORY_OPENABLE); type="audio/wav"; putExtra(Intent.EXTRA_TITLE,file.name) }, 400) }\n        del.setOnClickListener{player?.release();player=null;if(file.delete())refreshLibrary()}
         libraryContainer.addView(card,lp(-1,-2))
     }
 
-    private fun duration(file:File):String=try{RandomAccessFile(file,"r").use{r->r.seek(24);val rate=Integer.reverseBytes(r.readInt());r.seek(40);val bytes=Integer.reverseBytes(r.readInt()).toLong();val s=if(rate>0)bytes/(rate*2L) else 0;"%02d:%02d".format(Locale.UK,s/60,s%60)}}catch(_:Exception){"00:00"}
+    override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?){\n        super.onActivityResult(requestCode,resultCode,data)\n        if(requestCode==400 && resultCode==RESULT_OK && data?.data!=null && exportFile!=null){\n            try{ contentResolver.openOutputStream(data.data!!)?.use{out->exportFile!!.inputStream().use{input->input.copyTo(out)}}; Toast.makeText(this,"Recording exported",Toast.LENGTH_SHORT).show() }\n            catch(_:Exception){ Toast.makeText(this,"Export failed",Toast.LENGTH_SHORT).show() }\n            finally{exportFile=null}\n        }\n    }\n\n    private fun duration(file:File):String=try{RandomAccessFile(file,"r").use{r->r.seek(24);val rate=Integer.reverseBytes(r.readInt());r.seek(40);val bytes=Integer.reverseBytes(r.readInt()).toLong();val s=if(rate>0)bytes/(rate*2L) else 0;"%02d:%02d".format(Locale.UK,s/60,s%60)}}catch(_:Exception){"00:00"}
     private fun recordingsDir()=File(getExternalFilesDir("recordings") ?: filesDir,"recordings").apply{mkdirs()}
 
     private fun findBluetoothInput():AudioDeviceInfo?{
@@ -238,7 +243,7 @@ class MainActivity : Activity() {
     private fun sensitivityName(p:Int)=when{p<20->"Normal";p<40->"High";p<60->"Very High";p<80->"Extreme";else->"Extreme+"}
     private fun formatSize(b:Long)=if(b>=1024*1024)"%.1f MB".format(Locale.UK,b/1024f/1024f) else "${b/1024} KB"
 
-    class WaveformView(c:Context):View(c){
+    class LiveWaveformView(c:Context):View(c){\n        private val paint=Paint(Paint.ANTI_ALIAS_FLAG).apply{color=0xFF64D8FF.toInt();strokeWidth=4f}\n        private val levels=FloatArray(72)\n        fun setLevel(v:Float){System.arraycopy(levels,1,levels,0,levels.size-1);levels[levels.lastIndex]=v.coerceIn(0f,1f);invalidate()}\n        override fun onDraw(c:Canvas){super.onDraw(c);val mid=height/2f;val step=width/levels.size.toFloat();levels.forEachIndexed{i,v->val h=(v*height*.9f).coerceAtLeast(2f);c.drawLine(i*step,mid-h/2,i*step,mid+h/2,paint)}}\n    }\n\n    class WaveformView(c:Context):View(c){
         private val paint=Paint(Paint.ANTI_ALIAS_FLAG).apply{color=0xFF36CFFF.toInt();strokeWidth=3f}
         private var levels=FloatArray(0)
         fun load(f:File){try{RandomAccessFile(f,"r").use{r->if(r.length()<44)return;r.seek(44);val samples=(r.length()-44)/2;val count=90;levels=FloatArray(count)
