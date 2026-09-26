@@ -12,6 +12,10 @@ import android.os.*
 import android.view.*
 import android.widget.*
 import android.graphics.drawable.GradientDrawable
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
 import java.io.File
 import java.io.RandomAccessFile
 import java.util.Locale
@@ -30,7 +34,7 @@ class MainActivity : Activity() {
 
     private var recording = false
     private var pulse: ObjectAnimator? = null
-    private var player: PcmPlayback? = null
+    private var player: ExoPlayer? = null
     private var activeFile: File? = null
     private var activePlayButton: TextView? = null
     private var activeSeek: SeekBar? = null
@@ -48,19 +52,13 @@ class MainActivity : Activity() {
     private val playbackTick = object : Runnable {
         override fun run() {
             val p = player
-            if (p != null && p.isPlaying()) {
-                val position = p.currentPositionMillis()
-                val total = p.durationMillis()
-                activeSeek?.max = total.coerceAtLeast(1L).toInt()
-                activeSeek?.progress = position.coerceIn(0L, total).toInt()
+            if (p != null) {
+                val total = p.duration.coerceAtLeast(0L)
+                val position = p.currentPosition.coerceIn(0L, total)
+                activeSeek?.max = total.coerceAtLeast(1L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                activeSeek?.progress = position.coerceIn(0L, total).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
                 activePosition?.text = formatMillis(position) + " / " + formatMillis(total)
-                handler.postDelayed(this, 200)
-            } else if (p != null) {
-                val position = p.currentPositionMillis()
-                val total = p.durationMillis()
-                activeSeek?.max = total.coerceAtLeast(1L).toInt()
-                activeSeek?.progress = position.coerceIn(0L, total).toInt()
-                activePosition?.text = formatMillis(position) + " / " + formatMillis(total)
+                if (p.isPlaying) handler.postDelayed(this, 200)
             }
         }
     }
@@ -130,11 +128,12 @@ class MainActivity : Activity() {
         val scroll = ScrollView(this).apply {
             setBackgroundColor(Color.rgb(5, 8, 16))
             isFillViewport = true
-            clipToPadding = true
+            clipToPadding = false
+            overScrollMode = View.OVER_SCROLL_NEVER
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(42), dp(18), dp(32))
+            setPadding(dp(18), dp(18), dp(18), dp(24))
             setBackgroundColor(Color.rgb(5, 8, 16))
         }
         scroll.addView(root)
@@ -142,7 +141,7 @@ class MainActivity : Activity() {
         scroll.setOnApplyWindowInsetsListener { _, insets ->
             if (Build.VERSION.SDK_INT >= 30) {
                 val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
-                root.setPadding(dp(18) + bars.left, dp(42) + bars.top, dp(18) + bars.right, dp(32) + bars.bottom)
+                root.setPadding(dp(18) + bars.left, dp(18) + bars.top, dp(18) + bars.right, dp(24) + bars.bottom)
             } else {
                 @Suppress("DEPRECATION")
                 root.setPadding(
@@ -198,7 +197,7 @@ class MainActivity : Activity() {
             minHeight = dp(58)
             setOnClickListener { toggleRecording() }
         }
-        root.addView(recordButton, lp(-1, 66))
+        root.addView(recordButton, lp(-1, 72))
 
         root.addView(label("INPUT MONITOR", 11f, 0xFF7890A5.toInt()).apply {
             setPadding(dp(4), dp(14), dp(4), dp(6))
@@ -302,7 +301,8 @@ class MainActivity : Activity() {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(4), 0, dp(4))
+            setPadding(0, dp(5), 0, dp(5))
+            minimumHeight = dp(34)
         }
         val left = label(title, 10.5f, 0xFF7E94A9.toInt()).apply {
             letterSpacing = 0.06f
@@ -400,7 +400,7 @@ class MainActivity : Activity() {
 
         val wave = WaveformView(this)
         wave.load(file)
-        card.addView(wave, lp(-1, 60))
+        card.addView(wave, lp(-1, 64))
 
         val position = label("00:00 / " + duration(file), 10.5f, 0xFF8195A8.toInt())
         card.addView(position, lp(-1, -2))
@@ -409,7 +409,7 @@ class MainActivity : Activity() {
             max = durationMillis(file).coerceAtLeast(1).toInt()
             progress = 0
         }
-        card.addView(seek, lp(-1, 42))
+        card.addView(seek, lp(-1, 46))
 
         val row1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val play = smallButton("PLAY")
@@ -449,12 +449,12 @@ class MainActivity : Activity() {
         }
 
         back.setOnClickListener {
-            if (activeFile == file) player?.seekTo((player?.currentPositionMillis()?.minus(10000L) ?: 0L).coerceAtLeast(0L))
+            if (activeFile == file) player?.seekTo((player?.currentPosition?.minus(10000L) ?: 0L).coerceAtLeast(0L))
         }
         fwd.setOnClickListener {
             if (activeFile == file) {
                 val p = player
-                if (p != null) p.seekTo((p.currentPositionMillis() + 10000L).coerceAtMost(p.durationMillis()))
+                if (p != null) p.seekTo((p.currentPosition + 10000L).coerceAtMost(p.duration.coerceAtLeast(0L)))
             }
         }
         speed.setOnClickListener {
@@ -465,12 +465,12 @@ class MainActivity : Activity() {
                 else -> 1f
             }
             speed.text = String.format(Locale.UK, "%.2g×", rate)
-            if (activeFile == file) player?.setSpeed(rate)
+            if (activeFile == file) player?.setPlaybackSpeed(rate)
         }
         boost.setOnClickListener {
             boosted = !boosted
             boost.text = if (boosted) "BOOST ON" else "BOOST"
-            if (activeFile == file) player?.setVolume(if (boosted) 1.45f else 1f)
+            if (activeFile == file) player?.volume = 1f
         }
         export.setOnClickListener {
             exportFile = file
@@ -501,45 +501,39 @@ class MainActivity : Activity() {
         releasePlayer()
         try {
             repairWavIfNeeded(file)
-            val pcm = PcmPlayback(
-                file,
-                onProgress = { ms ->
-                    runOnUiThread {
-                        if (activeFile == file) {
-                            val total = durationMillis(file)
-                            seek.max = total.coerceAtLeast(1L).toInt()
-                            seek.progress = ms.coerceIn(0L, total).toInt()
-                            position.text = formatMillis(ms) + " / " + formatMillis(total)
-                        }
-                    }
-                },
-                onComplete = {
-                    runOnUiThread {
-                        if (activeFile == file) {
-                            seek.progress = seek.max
-                            position.text = formatMillis(durationMillis(file)) + " / " + formatMillis(durationMillis(file))
-                            releasePlayer()
-                        }
-                    }
-                },
-                onError = {
-                    runOnUiThread {
+            val exo = ExoPlayer.Builder(this).build()
+            exo.addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(state: Int) {
+                    if (state == Player.STATE_READY) {
+                        val total = exo.duration.coerceAtLeast(0L)
+                        seek.max = total.coerceAtLeast(1L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                        position.text = formatMillis(exo.currentPosition) + " / " + formatMillis(total)
+                    } else if (state == Player.STATE_ENDED) {
+                        seek.progress = seek.max
+                        position.text = formatMillis(exo.duration.coerceAtLeast(0L)) + " / " + formatMillis(exo.duration.coerceAtLeast(0L))
                         releasePlayer()
-                        Toast.makeText(this, "Unable to play this recording.", Toast.LENGTH_SHORT).show()
                     }
                 }
-            )
-            player = pcm
+
+                override fun onPlayerError(error: PlaybackException) {
+                    releasePlayer()
+                    Toast.makeText(this@MainActivity, "Unable to play this recording.", Toast.LENGTH_SHORT).show()
+                }
+            })
+
+            player = exo
             activeFile = file
             activePlayButton = playButton
             activeSeek = seek
             activePosition = position
-            seek.max = pcm.durationMillis().coerceAtLeast(1L).toInt()
-            seek.progress = 0
+
+            exo.setPlaybackSpeed(rate)
+            exo.volume = if (boosted) 1f else 1f
+            exo.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(file)))
+            exo.prepare()
+            exo.playWhenReady = true
+
             playButton.text = "STOP"
-            pcm.setSpeed(rate)
-            pcm.setVolume(if (boosted) 1.45f else 1f)
-            pcm.start()
             handler.removeCallbacks(playbackTick)
             handler.post(playbackTick)
         } catch (_: Exception) {
@@ -550,7 +544,7 @@ class MainActivity : Activity() {
 
     private fun releasePlayer() {
         handler.removeCallbacks(playbackTick)
-        try { player?.stop() } catch (_: Exception) {}
+        try { player?.release() } catch (_: Exception) {}
         player = null
         activePlayButton?.text = "PLAY"
         activeFile = null
@@ -730,7 +724,7 @@ class MainActivity : Activity() {
 
     private fun smallButton(t: String) = TextView(this).apply {
         text = t
-        minHeight = dp(42)
+        minHeight = dp(44)
         textSize = 10.5f
         gravity = Gravity.CENTER
         setTextColor(Color.WHITE)
@@ -746,141 +740,11 @@ class MainActivity : Activity() {
         setMargins(0, dp(4), 0, dp(4))
     }
 
-    private fun weightLp() = LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+    private fun weightLp() = LinearLayout.LayoutParams(0, dp(44), 1f).apply {
         setMargins(dp(2), 0, dp(2), 0)
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
-
-    private class PcmPlayback(
-        private val file: File,
-        private val onProgress: (Long) -> Unit,
-        private val onComplete: () -> Unit,
-        private val onError: () -> Unit
-    ) {
-        private val sampleRate = 16000
-        private val frameBytes = 2
-        private val dataOffset = 44L
-        private val totalDataBytes = (file.length() - dataOffset).coerceAtLeast(0L)
-        private val totalFrames = totalDataBytes / frameBytes
-        private val totalDuration = totalFrames * 1000L / sampleRate
-
-        @Volatile private var running = false
-        @Volatile private var speed = 1f
-        @Volatile private var volume = 1f
-        @Volatile private var pendingSeekMs: Long? = null
-        @Volatile private var filePositionBytes = 0L
-        private var track: AudioTrack? = null
-        private var worker: Thread? = null
-
-        fun durationMillis(): Long = totalDuration
-        fun isPlaying(): Boolean = running
-        fun currentPositionMillis(): Long =
-            ((filePositionBytes / frameBytes) * 1000L / sampleRate).coerceIn(0L, totalDuration)
-
-        fun setSpeed(value: Float) {
-            speed = value.coerceIn(0.5f, 2f)
-            try { track?.playbackRate = (sampleRate * speed).toInt() } catch (_: Exception) {}
-        }
-
-        fun setVolume(value: Float) {
-            volume = value.coerceIn(0f, 1.5f)
-            try { track?.setVolume(volume) } catch (_: Exception) {}
-        }
-
-        fun seekTo(ms: Long) {
-            pendingSeekMs = ms.coerceIn(0L, totalDuration)
-        }
-
-        fun start() {
-            if (running) return
-            val minBuffer = AudioTrack.getMinBufferSize(
-                sampleRate,
-                AudioFormat.CHANNEL_OUT_MONO,
-                AudioFormat.ENCODING_PCM_16BIT
-            )
-            if (minBuffer <= 0) throw IllegalStateException("Unsupported PCM output")
-            val bufferSize = max(minBuffer * 2, 4096)
-            val format = AudioFormat.Builder()
-                .setSampleRate(sampleRate)
-                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                .build()
-            val attrs = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                .build()
-            track = AudioTrack(attrs, format, bufferSize, AudioTrack.MODE_STREAM, AudioManager.AUDIO_SESSION_ID_GENERATE)
-            track?.setVolume(volume)
-            track?.playbackRate = (sampleRate * speed).toInt()
-            running = true
-            worker = Thread { runPlayback(bufferSize) }.also {
-                it.name = "EchoLink-PcmPlayback"
-                it.start()
-            }
-        }
-
-        private fun runPlayback(bufferSize: Int) {
-            try {
-                RandomAccessFile(file, "r").use { raf ->
-                    filePositionBytes = 0L
-                    raf.seek(dataOffset)
-                    val buffer = ByteArray(bufferSize.coerceAtMost(64 * 1024))
-                    val audio = track ?: throw IllegalStateException("AudioTrack unavailable")
-                    audio.play()
-
-                    while (running) {
-                        pendingSeekMs?.let { seekMs ->
-                            pendingSeekMs = null
-                            filePositionBytes = ((seekMs * sampleRate) / 1000L) * frameBytes
-                            filePositionBytes = filePositionBytes.coerceIn(0L, totalDataBytes)
-                            raf.seek(dataOffset + filePositionBytes)
-                            try { audio.flush(); audio.play() } catch (_: Exception) {}
-                        }
-
-                        val remaining = totalDataBytes - filePositionBytes
-                        if (remaining <= 0L) break
-                        val read = raf.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
-                        if (read <= 0) break
-
-                        var written = 0
-                        while (running && written < read) {
-                            val n = audio.write(buffer, written, read - written, AudioTrack.WRITE_BLOCKING)
-                            if (n < 0) throw IllegalStateException("AudioTrack write failed: $n")
-                            written += n
-                        }
-                        filePositionBytes += written.toLong()
-                        if (written > 0) onProgress(currentPositionMillis())
-                    }
-
-                    if (running) {
-                        while (running && audio.playbackState == AudioTrack.PLAYSTATE_PLAYING &&
-                            audio.playbackHeadPosition.toLong() < totalFrames) {
-                            onProgress(currentPositionMillis())
-                            Thread.sleep(50)
-                        }
-                    }
-                }
-                val completed = running && filePositionBytes >= totalDataBytes
-                running = false
-                if (completed) onComplete()
-            } catch (_: Exception) {
-                running = false
-                onError()
-            } finally {
-                try { track?.stop() } catch (_: Exception) {}
-                try { track?.release() } catch (_: Exception) {}
-                track = null
-            }
-        }
-
-        fun stop() {
-            running = false
-            try { track?.pause(); track?.flush(); track?.stop() } catch (_: Exception) {}
-            try { worker?.interrupt() } catch (_: Exception) {}
-            worker = null
-        }
-    }
 
     class LiveWaveformView(c: Context) : View(c) {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
