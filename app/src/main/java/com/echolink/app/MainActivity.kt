@@ -297,13 +297,28 @@ class MainActivity : Activity() {
         files.forEach { addRecordingCard(it) }
     }
 
+    private data class AudioSettings(
+        var bass: Int = 100,
+        var mid: Int = 100,
+        var treble: Int = 100,
+        var presence: Int = 100,
+        var brilliance: Int = 100,
+        var agc: Boolean = false,
+        var voiceIsolation: Boolean = false,
+        var noiseReduction: Int = 0
+    ) {
+        fun changed(): Boolean =
+            bass != 100 || mid != 100 || treble != 100 || presence != 100 ||
+            brilliance != 100 || agc || voiceIsolation || noiseReduction > 0
+    }
+
     private fun addRecordingCard(file: File) {
         val card = panel().apply {
             clipChildren = false
             clipToPadding = false
         }
-        val title = humanFileTitle(file)
-        card.addView(label(title, 15f, Color.WHITE).apply {
+
+        card.addView(label(humanFileTitle(file), 15f, Color.WHITE).apply {
             typeface = Typeface.DEFAULT_BOLD
         }, lp(-1, -2))
         card.addView(label(
@@ -312,16 +327,17 @@ class MainActivity : Activity() {
         ), lp(-1, -2))
 
         val wave = WaveformView(this)
-        card.addView(wave, compactLp(-1,58))
-        processorExecutor.execute { wave.load(file); runOnUiThread { if (wave.isAttachedToWindow) wave.invalidate() } }
-
-        val position = label("00:00 / " + duration(file), 10.5f, 0xFF8195A8.toInt()).apply {
-            setPadding(0, dp(3), 0, 0)
+        card.addView(wave, compactLp(-1, 58))
+        processorExecutor.execute {
+            wave.load(file)
+            runOnUiThread { if (wave.isAttachedToWindow) wave.invalidate() }
         }
+
+        val position = label("00:00 / " + duration(file), 10.5f, 0xFF8195A8.toInt())
         card.addView(position, compactLp(-1, 28))
 
         val seek = SeekBar(this).apply {
-            max = durationMillis(file).coerceAtLeast(1).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+            max = durationMillis(file).coerceAtLeast(1L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
             progress = 0
         }
         card.addView(seek, compactLp(-1, 40))
@@ -339,37 +355,60 @@ class MainActivity : Activity() {
         listOf(play, back, fwd, speed).forEach { row1.addView(it, rowButtonLp()) }
         card.addView(row1, controlRowLp())
 
+        val settings = AudioSettings()
         val adjustments = panel().apply {
             setPadding(dp(10), dp(10), dp(10), dp(10))
         }
-        adjustments.addView(label("AUDIO ADJUSTMENTS", 12f, 0xFFB58CFF.toInt()).apply {
-            letterSpacing = 0.08f
-        }, lp(-1, -2))
+        adjustments.addView(label("AUDIO ADJUSTMENTS", 12f, 0xFFB58CFF.toInt()), lp(-1, -2))
 
+        fun valueText(name: String, value: Int): String {
+            val db = (value - 100) * 12 / 100
+            return if (db == 0) name else name + "  " + (if (db > 0) "+" else "") + db + " dB"
+        }
+
+        val eqNames = listOf("Bass", "Mid", "Treble", "Presence", "Brilliance")
+        val eqSetters: List<(Int) -> Unit> = listOf(
+            { settings.bass = it },
+            { settings.mid = it },
+            { settings.treble = it },
+            { settings.presence = it },
+            { settings.brilliance = it }
+        )
         val eq = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
         }
-        listOf("Bass", "Mid", "Treble", "Presence", "Brilliance").forEach { name ->
+
+        eqNames.forEachIndexed { index, name ->
             val col = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
             }
-            col.addView(label(name, 9.5f, 0xFFD6D6E2.toInt()).apply {
+            val caption = label(valueText(name, 100), 9.5f, 0xFFD6D6E2.toInt()).apply {
                 gravity = Gravity.CENTER
-            }, lp(-1, -2))
-            val seek = SeekBar(this).apply {
+                maxLines = 2
+            }
+            col.addView(caption, lp(-1, -2))
+            val slider = SeekBar(this).apply {
                 max = 200
                 progress = 100
                 rotation = -90f
                 splitTrack = false
+                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                        eqSetters[index](p)
+                        caption.text = valueText(name, p)
+                    }
+                    override fun onStartTrackingTouch(s: SeekBar?) {}
+                    override fun onStopTrackingTouch(s: SeekBar?) {}
+                })
             }
-            col.addView(seek, LinearLayout.LayoutParams(dp(54), dp(92)))
+            col.addView(slider, LinearLayout.LayoutParams(dp(54), dp(92)))
             eq.addView(col, LinearLayout.LayoutParams(0, dp(118), 1f))
         }
         adjustments.addView(eq, lp(-1, dp(124)))
 
-        fun switchRow(title: String, enabled: Boolean, onChange: (Boolean) -> Unit) {
+        fun switchRow(title: String, onChange: (Boolean) -> Unit) {
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -377,62 +416,65 @@ class MainActivity : Activity() {
             }
             row.addView(label(title, 12f, Color.WHITE), LinearLayout.LayoutParams(0, dp(44), 1f))
             val sw = Switch(this).apply {
-                isChecked = enabled
-                buttonDrawable = null
+                isChecked = false
                 setOnCheckedChangeListener { _, checked -> onChange(checked) }
             }
             row.addView(sw, LinearLayout.LayoutParams(dp(58), dp(44)))
             adjustments.addView(row, lp(-1, dp(46)))
         }
 
-        switchRow("Auto-Gain Control (AGC)", false) { }
-        switchRow("Voice Isolation", false) { }
+        switchRow("Auto-Gain Control (AGC)") { settings.agc = it }
+        switchRow("Voice Isolation") { settings.voiceIsolation = it }
 
         val noiseRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        noiseRow.addView(label("Noise Reduction", 12f, Color.WHITE), LinearLayout.LayoutParams(0, dp(64), 1f))
+        val noiseCaption = label("Noise Reduction  0%", 12f, Color.WHITE)
+        noiseRow.addView(noiseCaption, LinearLayout.LayoutParams(0, dp(64), 1f))
         val noise = SeekBar(this).apply {
             max = 100
-            progress = 40
+            progress = 0
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                    settings.noiseReduction = p
+                    noiseCaption.text = "Noise Reduction  " + p + "%"
+                }
+                override fun onStartTrackingTouch(s: SeekBar?) {}
+                override fun onStopTrackingTouch(s: SeekBar?) {}
+            })
         }
         noiseRow.addView(noise, LinearLayout.LayoutParams(dp(150), dp(54)))
         adjustments.addView(noiseRow, lp(-1, dp(66)))
 
-        val playbackRow = LinearLayout(this).apply {
+        var rate = 1f
+        val actionRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        playbackRow.addView(label("Playback Speed", 12f, Color.WHITE), LinearLayout.LayoutParams(0, dp(48), 1f))
+        val applyButton = smallButton("APPLY").apply { minHeight = dp(40) }
+        val resetButton = smallButton("RESET").apply { minHeight = dp(40) }
         val speedAdjust = smallButton("1×").apply { minHeight = dp(40) }
-        playbackRow.addView(speedAdjust, LinearLayout.LayoutParams(dp(72), dp(42)))
-        val exportLabel = label("Export as...", 11f, 0xFFD6D6E2.toInt()).apply {
+        actionRow.addView(applyButton, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(2),0,dp(2),0) })
+        actionRow.addView(resetButton, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(2),0,dp(2),0) })
+        actionRow.addView(speedAdjust, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(2),0,dp(2),0) })
+        adjustments.addView(actionRow, lp(-1, dp(50)))
+
+        val exportRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        playbackRow.addView(exportLabel, LinearLayout.LayoutParams(dp(82), dp(42)))
-        listOf("MP3", "WAV", "AAC").forEach { format ->
-            val b = smallButton(format).apply { minHeight = dp(40) }
-            playbackRow.addView(b, LinearLayout.LayoutParams(dp(58), dp(42)).apply {
-                setMargins(dp(2), 0, dp(2), 0)
-            })
-        }
-        adjustments.addView(playbackRow, lp(-1, dp(50)))
-
+        val export = smallButton("EXPORT WAV").apply { minHeight = dp(40) }
         val deleteButton = smallButton("DELETE").apply { minHeight = dp(40) }
-        playbackRow.addView(deleteButton, LinearLayout.LayoutParams(dp(76), dp(42)).apply {
-            setMargins(dp(2), 0, dp(2), 0)
-        })
-        deleteButton.setOnClickListener {
-            if (activeFile == file) releasePlayer()
-            if (file.delete()) refreshLibrary()
-            else Toast.makeText(this, "Could not delete recording", Toast.LENGTH_SHORT).show()
-        }
-
+        exportRow.addView(export, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(2),0,dp(2),0) })
+        exportRow.addView(deleteButton, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(2),0,dp(2),0) })
+        adjustments.addView(exportRow, lp(-1, dp(50)))
         card.addView(adjustments, lp(-1, -2))
 
-
-        var rate = 1f
+        fun applySettingsAndPlay() {
+            if (activeFile == file) releasePlayer()
+            startPlayback(file, play, seek, position, rate, settings)
+        }
 
         seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -447,10 +489,28 @@ class MainActivity : Activity() {
 
         play.setOnClickListener {
             if (activeFile == file && player != null) releasePlayer()
-            else startPlayback(file, play, seek, position, rate, PlaybackMode.NORMAL)
+            else startPlayback(file, play, seek, position, rate, settings)
         }
+        applyButton.setOnClickListener { applySettingsAndPlay() }
+
+        resetButton.setOnClickListener {
+            settings.bass = 100
+            settings.mid = 100
+            settings.treble = 100
+            settings.presence = 100
+            settings.brilliance = 100
+            settings.agc = false
+            settings.voiceIsolation = false
+            settings.noiseReduction = 0
+            Toast.makeText(this, "Audio adjustments reset", Toast.LENGTH_SHORT).show()
+            if (activeFile == file) applySettingsAndPlay()
+        }
+
         back.setOnClickListener {
-            if (activeFile == file) player?.seekTo((player?.currentPosition ?: 0) - 10000)
+            if (activeFile == file) {
+                val p = player ?: return@setOnClickListener
+                p.seekTo((p.currentPosition - 10000).coerceAtLeast(0))
+            }
         }
         fwd.setOnClickListener {
             if (activeFile == file) {
@@ -466,25 +526,48 @@ class MainActivity : Activity() {
                 else -> 1f
             }
             speed.text = String.format(Locale.UK, "%.2g×", rate)
+            speedAdjust.text = speed.text
+            if (activeFile == file) {
+                try { player?.setPlaybackParams(PlaybackParams().setSpeed(rate).setPitch(1f)) } catch (_: Exception) {}
+            }
+        }
+        speedAdjust.setOnClickListener {
+            rate = when (rate) {
+                1f -> 0.75f
+                0.75f -> 1.25f
+                1.25f -> 1.5f
+                1.5f -> 2f
+                else -> 1f
+            }
+            speed.text = String.format(Locale.UK, "%.2g×", rate)
+            speedAdjust.text = speed.text
             if (activeFile == file) {
                 try { player?.setPlaybackParams(PlaybackParams().setSpeed(rate).setPitch(1f)) } catch (_: Exception) {}
             }
         }
 
-        val export = smallButton("EXPORT").apply { minHeight = dp(40) }
-        playbackRow.addView(export, LinearLayout.LayoutParams(dp(76), dp(42)).apply {
-            setMargins(dp(2), 0, dp(2), 0)
-        })
-
         export.setOnClickListener {
-            exportFile = file
+            exportFile = if (settings.changed()) {
+                createProcessedFile(file, settings)
+            } else file
             val i = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
                 type = "audio/wav"
-                putExtra(Intent.EXTRA_TITLE, file.name)
+                putExtra(Intent.EXTRA_TITLE, file.nameWithoutExtension + "_adjusted.wav")
             }
             startActivityForResult(i, 400)
         }
+
+        deleteButton.setOnClickListener {
+            if (activeFile == file) releasePlayer()
+            if (file.delete()) {
+                Toast.makeText(this, "Recording deleted", Toast.LENGTH_SHORT).show()
+                refreshLibrary()
+            } else {
+                Toast.makeText(this, "Could not delete recording", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         libraryContainer.addView(card, lp(-1, -2))
     }
 
@@ -494,12 +577,12 @@ class MainActivity : Activity() {
         seek: SeekBar,
         position: TextView,
         rate: Float,
-        mode: PlaybackMode
+        settings: AudioSettings = AudioSettings()
     ) {
         releasePlayer()
         try {
             repairWavIfNeeded(file)
-            val source = if (mode == PlaybackMode.NORMAL) file else createProcessedFile(file, mode)
+            val source = if (settings.changed()) createProcessedFile(file, settings) else file
             val mp = MediaPlayer()
 
             player = mp
@@ -573,58 +656,12 @@ class MainActivity : Activity() {
         }
     }
 
-    private enum class PlaybackMode { NORMAL, BOOST, CLEAR }
-    private fun restartProcessedPlayback(file:File,playButton:TextView,seek:SeekBar,position:TextView,rate:Float,mode:PlaybackMode){
-        releasePlayer(); startPlayback(file,playButton,seek,position,rate,mode)
-    }
-    private fun createProcessedFile(source: File, mode: PlaybackMode): File {
-        if (mode == PlaybackMode.BOOST) {
-            return createGainFile(source, 3.5f, "_boost_v7")
-        }
-
-        return createSpeechFile(source)
-    }
-
-    private fun createGainFile(source: File, gain: Float, suffix: String): File {
+    private fun createProcessedFile(source: File, settings: AudioSettings): File {
         val dir = File(cacheDir, "processed").apply { mkdirs() }
-        val target = File(dir, source.nameWithoutExtension + suffix + ".wav")
-
-        RandomAccessFile(source, "r").use { input ->
-            val payload = (input.length() - 44L).coerceAtLeast(0L)
-            RandomAccessFile(target, "rw").use { out ->
-                out.setLength(0)
-                writeWavHeader(out, payload)
-                input.seek(44L)
-                val buffer = ByteArray(8192)
-                var remaining = payload
-
-                while (remaining > 0L) {
-                    val n = input.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
-                    if (n <= 0) break
-                    var i = 0
-                    while (i + 1 < n) {
-                        val raw = (buffer[i].toInt() and 0xFF) or (buffer[i + 1].toInt() shl 8)
-                        val sample = if ((raw and 0x8000) != 0) raw - 65536 else raw
-                        val x = sample / 32768.0
-                        // 3.5x gain with soft saturation, so quiet speech becomes
-                        // substantially louder without turning peaks into wraparound.
-                        val y = kotlin.math.tanh(x * gain)
-                        val v = (y * 32767.0).toInt().coerceIn(-32768, 32767)
-                        buffer[i] = (v and 0xFF).toByte()
-                        buffer[i + 1] = (v shr 8).toByte()
-                        i += 2
-                    }
-                    out.write(buffer, 0, n)
-                    remaining -= n.toLong()
-                }
-            }
-        }
-        return target
-    }
-
-    private fun createSpeechFile(source: File): File {
-        val dir = File(cacheDir, "processed").apply { mkdirs() }
-        val target = File(dir, source.nameWithoutExtension + "_speech_v7.wav")
+        val key = listOf(settings.bass, settings.mid, settings.treble, settings.presence,
+            settings.brilliance, if (settings.agc) 1 else 0,
+            if (settings.voiceIsolation) 1 else 0, settings.noiseReduction).joinToString("_")
+        val target = File(dir, source.nameWithoutExtension + "_adj_" + key.hashCode() + ".wav")
 
         RandomAccessFile(source, "r").use { input ->
             val payload = (input.length() - 44L).coerceAtLeast(0L)
@@ -635,40 +672,68 @@ class MainActivity : Activity() {
 
                 val buffer = ByteArray(8192)
                 var remaining = payload
+                var low = 0.0
+                var midLow = 0.0
+                var highLow = 0.0
+                var envelope = 0.0
+                var agcGain = 1.0
 
-                // Speech-band filter:
-                // high-pass removes very low rumble; low-pass removes hiss.
-                // The combination keeps the middle speech region prominent.
-                var hpPrevX = 0.0
-                var hpPrevY = 0.0
-                var lp = 0.0
+                fun db(v: Int): Double = (v - 100) / 100.0 * 12.0
+                fun gainDb(v: Int): Double = Math.pow(10.0, db(v) / 20.0)
 
                 while (remaining > 0L) {
                     val n = input.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
                     if (n <= 0) break
                     var i = 0
-
                     while (i + 1 < n) {
                         val raw = (buffer[i].toInt() and 0xFF) or (buffer[i + 1].toInt() shl 8)
                         val sample = if ((raw and 0x8000) != 0) raw - 65536 else raw
                         val x = sample / 32768.0
 
-                        // ~100 Hz high-pass, then ~5 kHz low-pass at 16 kHz sample rate.
-                        val hp = 0.985 * (hpPrevY + x - hpPrevX)
-                        hpPrevX = x
-                        hpPrevY = hp
+                        low += 0.035 * (x - low)
+                        midLow += 0.12 * (x - midLow)
+                        highLow += 0.35 * (x - highLow)
 
-                        lp += 0.38 * (hp - lp)
+                        val bassBand = low
+                        val midBand = midLow - low
+                        val trebleBand = x - highLow
+                        val presenceBand = highLow - midLow
+                        var y = x +
+                            bassBand * (gainDb(settings.bass) - 1.0) +
+                            midBand * (gainDb(settings.mid) - 1.0) +
+                            trebleBand * (gainDb(settings.treble) - 1.0) +
+                            presenceBand * (gainDb(settings.presence) - 1.0) +
+                            trebleBand * 0.35 * (gainDb(settings.brilliance) - 1.0)
 
-                        // Modest speech lift after filtering.
-                        val y = (lp * 1.35).coerceIn(-1.0, 1.0)
+                        if (settings.voiceIsolation) {
+                            y = y.coerceIn(-0.8, 0.8)
+                            y *= 1.12
+                        }
+
+                        val absY = abs(y)
+                        envelope += 0.01 * (absY - envelope)
+                        if (settings.agc) {
+                            val target = 0.22
+                            val desired = (target / envelope.coerceAtLeast(0.035)).coerceIn(0.65, 2.5)
+                            agcGain += 0.002 * (desired - agcGain)
+                            y *= agcGain
+                        }
+
+                        if (settings.noiseReduction > 0) {
+                            val strength = settings.noiseReduction / 100.0
+                            val threshold = 0.008 + strength * 0.035
+                            if (absY < threshold) {
+                                val attenuation = 1.0 - strength * 0.9
+                                y *= attenuation
+                            }
+                        }
+
+                        y = y.coerceIn(-0.98, 0.98)
                         val v = (y * 32767.0).toInt().coerceIn(-32768, 32767)
-
                         buffer[i] = (v and 0xFF).toByte()
                         buffer[i + 1] = (v shr 8).toByte()
                         i += 2
                     }
-
                     out.write(buffer, 0, n)
                     remaining -= n.toLong()
                 }
