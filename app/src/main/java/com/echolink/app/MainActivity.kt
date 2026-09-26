@@ -502,8 +502,9 @@ class MainActivity : Activity() {
             settings.agc = false
             settings.voiceIsolation = false
             settings.noiseReduction = 0
+            if (activeFile == file) releasePlayer()
             Toast.makeText(this, "Audio adjustments reset", Toast.LENGTH_SHORT).show()
-            if (activeFile == file) applySettingsAndPlay()
+            refreshLibrary()
         }
 
         back.setOnClickListener {
