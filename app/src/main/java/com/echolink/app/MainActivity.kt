@@ -165,12 +165,12 @@ class MainActivity : Activity() {
         root.addView(label("ECHOLINK", 29f, 0xFFE7E5EE.toInt()).apply {
             gravity = Gravity.CENTER
             letterSpacing = 0.03f
-        }, lp(-1, 62))
+        }, lp(-1, 78))
 
         root.addView(label("BLUETOOTH EAR BUD RECORDER", 11f, 0xFFA985C8.toInt()).apply {
             gravity = Gravity.CENTER
             letterSpacing = 0.08f
-        }, lp(-1, 38))
+        }, lp(-1, 50))
 
         val status = TextView(this).apply {
             tag = "main_status"
@@ -186,7 +186,7 @@ class MainActivity : Activity() {
             isSingleLine = true
             ellipsize = android.text.TextUtils.TruncateAt.END
         }
-        root.addView(status, lp(-1, 46))
+        root.addView(status, lp(-1, 52))
 
         val scroll = ScrollView(this).apply {
             clipToPadding = false
@@ -195,14 +195,15 @@ class MainActivity : Activity() {
         val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
         liveWave = LiveWaveformView(this)
-        content.addView(liveWave, lp(-1, 92))
+        content.addView(liveWave, lp(-1, 84))
 
         timerText = label("00:00", 48f, Color.WHITE).apply {
             gravity = Gravity.CENTER
             typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
-            includeFontPadding = false
+            includeFontPadding = true
+            setPadding(0, dp(8), 0, dp(8))
         }
-        content.addView(timerText, lp(-1, 74))
+        content.addView(timerText, lp(-1, 88))
 
         recordOrb = RecordOrbView(this).apply {
             isClickable = true
@@ -214,12 +215,13 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             letterSpacing = 0.05f
         }
-        content.addView(timerCaption, lp(-1, 34))
+        timerCaption.setPadding(dp(4), dp(8), dp(4), dp(8))
+        content.addView(timerCaption, lp(-1, 54))
 
         content.addView(label(
             "No captured audio is played live.",
             10.5f, 0xFF687080.toInt()
-        ).apply { gravity = Gravity.CENTER }, lp(-1, 32))
+        ).apply { gravity = Gravity.CENTER; setPadding(dp(4), dp(6), dp(4), dp(6)) }, lp(-1, 44))
 
         scroll.addView(content, LinearLayout.LayoutParams(-1, -2))
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -967,7 +969,9 @@ class MainActivity : Activity() {
         textSize = s
         setTextColor(c)
         includeFontPadding = true
+        setLineSpacing(0f, 1.05f)
         gravity = Gravity.CENTER_VERTICAL
+        clipToPadding = false
     }
 
     private fun panel() = LinearLayout(this).apply {
