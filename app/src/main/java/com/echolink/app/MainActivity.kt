@@ -736,7 +736,7 @@ class MainActivity : Activity() {
          * while a simple look-ahead peak gain prevents samples from exceeding
          * the PCM ceiling. The original recording is never changed.
          */
-        val gain = 1f + (safeBoost - 1f) * 0.55f
+        val gain = safeBoost
 
         RandomAccessFile(source, "r").use { input ->
             val payload = (input.length() - 44L).coerceAtLeast(0L)
