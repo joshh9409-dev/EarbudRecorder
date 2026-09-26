@@ -23,6 +23,7 @@ class RecordingService : Service() {
         const val EXTRA_RECORDING = "recording"
         const val EXTRA_TIMER = "timer"
         const val EXTRA_METER = "meter"
+        const val EXTRA_SENSITIVITY = "sensitivity"
         private const val CHANNEL = "echolink_recording"
         private const val NOTIFICATION_ID = 7
         private const val RATE = 16000
@@ -46,6 +47,8 @@ class RecordingService : Service() {
 
     @Volatile private var running = false
     @Volatile private var finalized = false
+    private var inputSensitivity = 1f
+    private var intentSensitivityPercent = 100
 
     private val retry = object : Runnable {
         override fun run() {
@@ -72,7 +75,10 @@ class RecordingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            START -> startCapture()
+            START -> {
+                intentSensitivityPercent = intent.getIntExtra(EXTRA_SENSITIVITY, 100).coerceIn(50, 300)
+                startCapture()
+            }
             STOP -> stopCapture()
         }
         return START_NOT_STICKY
@@ -95,7 +101,7 @@ class RecordingService : Service() {
             return
         }
 
-        // Recording input stays at a clean, fixed gain. Post-save tools handle playback adjustment.
+        inputSensitivity = (intentSensitivityPercent / 100f).coerceIn(0.5f, 3f)
         finalized = false
         dataBytes = 0L
 
@@ -167,6 +173,7 @@ class RecordingService : Service() {
                     val n = r.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
 
                     if (n > 0) {
+                        applyInputSensitivity(buffer, n)
                         synchronized(fileLock) {
                             if (out != null) {
                                 out!!.write(buffer, 0, n)
@@ -207,6 +214,22 @@ class RecordingService : Service() {
 
         if (storageFull) {
             ToastMessage.notifyStorage(this)
+        }
+    }
+
+    private fun applyInputSensitivity(buffer: ByteArray, n: Int) {
+        val gain = inputSensitivity
+        if (gain in 0.999f..1.001f) return
+
+        var i = 0
+        while (i + 1 < n) {
+            val raw = (buffer[i].toInt() and 0xFF) or
+                ((buffer[i + 1].toInt() and 0xFF) shl 8)
+            val sample = if ((raw and 0x8000) != 0) raw - 65536 else raw
+            val amplified = (sample * gain).toInt().coerceIn(-32768, 32767)
+            buffer[i] = (amplified and 0xFF).toByte()
+            buffer[i + 1] = ((amplified shr 8) and 0xFF).toByte()
+            i += 2
         }
     }
 
