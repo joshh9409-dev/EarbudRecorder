@@ -990,14 +990,3 @@ REC"; textSize=17f; gravity=Gravity.CENTER; typeface=Typeface.DEFAULT_BOLD
             }
         }
     }
-}        val deleteButton = smallButton("DELETE").apply { minHeight = dp(40) }
-        playbackRow.addView(deleteButton, LinearLayout.LayoutParams(dp(76), dp(42)).apply {
-            setMargins(dp(2), 0, dp(2), 0)
-        })
-        deleteButton.setOnClickListener {
-            if (activeFile == file) releasePlayer()
-            if (file.delete()) refreshLibrary()
-            else Toast.makeText(this, "Could not delete recording", Toast.LENGTH_SHORT).show()
-        }
-
-
